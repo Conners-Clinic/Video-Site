@@ -1,0 +1,23 @@
+{
+  "tool": "continuity",
+  "version": "0.2.0",
+  "source": "continuity-manager",
+  "source_commit": "d48303d89ccc",
+  "installed_at": "2026-10-30T16:10:13Z",
+  "note": "Managed by continuity-manager. Do not edit the files listed here in this repository; change them in continuity-manager and run its update command.",
+  "files": {
+    ".agents/skills/continuity-onboard/SKILL.md": "0935c1158c1ace30f4f419c4f91769af4e25e798cc4a2b1cc01c455e427b1511",
+    ".agents/skills/handoff/SKILL.md": "01fa4330dec0b8071bce64a4012c5ebbb0de7c14cb698415986d1328c5523cfd",
+    ".agents/skills/pickup/SKILL.md": "34a7790e400184533615bb4fc5d7cf44e11057a1c4b939ff696bb1164c23c23d",
+    ".continuity/README.md": "0972b6efae7aaa204151ef50df67996b6cfaf13cdda4a87a8436e78e87b689a7",
+    ".continuity/continuity": "b64344f0d465ba987de3ff1e1a5c906770aaf254de9594ab940717268d01bbf4",
+    ".continuity/hooks.json": "92c1b3ab9284b8a1a628fa6ba1edab3c4165c8b9b19aa9a304727eeac061c358",
+    ".continuity/scripts/continuity.py": "e6a7619ecc41b8718d6f286db152acc70bc526d0185eaad42f3310223f402fcf",
+    ".continuity/scripts/hook-precompact.sh": "a36c8aa00fe9ad84086119fd457135bc868d4aaaa6a56e7d2c206b4c90ee9839",
+    ".continuity/scripts/hook-prompt.sh": "2fb9f9db080fae46cd691c70ac9e22d45f1c6815bff8b3da717410cd561e7557",
+    ".continuity/scripts/hook-sessionend.sh": "9d33bc5760610d10e1d5f468e350d7b9cf24da695b8a93dcbde80f57d5d97922",
+    ".continuity/scripts/lib.sh": "ce6e110c542c3efe248e7e5aa22edfebf8f04872de7d4114123605c15497b4ba",
+    ".continuity/scripts/test.sh": "6011de56fbf0fc90bee168419eabf4c2e6389f26f1b8eedb3aac72deb8914cf9",
+    ".continuity/scripts/vercel-ignore.sh": "dc94f46a508180438aa395e17a05192b81ff26e880e656943ef6fc0e3e3f21b9"
+  }
+}

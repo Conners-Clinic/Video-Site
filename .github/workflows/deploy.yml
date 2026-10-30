@@ -5,6 +5,20 @@ on:
     branches:
       - main
       - super
+    # Skip pushes whose every changed file is a Continuity file: checkpoint
+    # records, or a tooling update from continuity-manager (.continuity/ plus
+    # its three skills). Any push that also changes anything else deploys.
+    paths-ignore:
+      - '.continuity/**'
+      - '.agents/skills/handoff/**'
+      - '.agents/skills/pickup/**'
+      - '.agents/skills/continuity-onboard/**'
+      - '.claude/skills/handoff'
+      - '.claude/skills/pickup'
+      - '.claude/skills/continuity-onboard'
+      - '.claude/skills/handoff/**'
+      - '.claude/skills/pickup/**'
+      - '.claude/skills/continuity-onboard/**'
   workflow_dispatch:
 
 concurrency:
