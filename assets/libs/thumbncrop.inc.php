@@ -210,7 +210,7 @@
     */
     private function nomefile($path, $ext = true)
     {
-      $diviso = spliti("[/|\\]", $path);
+      $diviso = preg_split('~[\\\\/|]+~', $path);
       
       if($ext)
       {

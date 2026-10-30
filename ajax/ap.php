@@ -1847,7 +1847,7 @@ if ($first == 'update-field') {
 
         if (!empty($_POST['options'])) {
             $options            = @explode("\n", trim($_POST['options']));
-            $up_data['options'] = implode($options, ',');
+            $up_data['options'] = implode(',', $options);
             $up_data['type']    = 'select';
         }
 

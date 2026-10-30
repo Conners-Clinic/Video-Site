@@ -48,7 +48,7 @@ class Twocheckout_Api_Requester
         if ($resp === FALSE) {
             throw new Twocheckout_Error("cURL call failed", "403");
         } else {
-            return utf8_encode($resp);
+            return mb_convert_encoding($resp, 'UTF-8', 'ISO-8859-1');
         }
 	}
 

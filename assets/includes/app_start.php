@@ -110,6 +110,7 @@ $pt->config               = ToObject($config);
 $pt->config->withdrawal_payment_method = json_decode($config['withdrawal_payment_method'],true);
 $langs                    = pt_db_langs();
 $pt->langs                = $langs;
+$pt->lang_modal_html      = '';
 
 try {
     $pt->iso = GetIso();

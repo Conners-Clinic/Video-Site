@@ -222,7 +222,7 @@ if ($pt->page != 'login') {
             $langs_modal_html .=  '<li class="language_select"><a href="?lang=' . $language . '" rel="nofollow" class="' . $language . '">' . $language_ . '</a></li>';
         }
     }
-    $pt->langs = $langs_modal_html;
+    $pt->lang_modal_html = $langs_modal_html;
     $footer = PT_LoadPage('footer/content', array(
         'DATE' => date('Y'),
         'LANGS' => $langs_html
