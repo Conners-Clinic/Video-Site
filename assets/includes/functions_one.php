@@ -33,8 +33,8 @@ function PT_UserData($user_id = 0, $options = array()) {
     $fetched_data->url    = PT_Link('@' . $fetched_data->username);
     $fetched_data->about_decoded = br2nl($fetched_data->about);
 
-    $explode2  = @end(explode('.', $fetched_data->ex_cover));
-    $explode3  = @explode('.', $fetched_data->ex_cover);
+    $explode3  = explode('.', (string) $fetched_data->ex_cover);
+    $explode2  = end($explode3);
     $fetched_data->full_cover = PT_GetMedia($fetched_data->ex_cover);
     if ($fetched_data->ex_cover != 'upload/photos/d-cover.jpg') {
         $fetched_data->full_cover = PT_GetMedia($explode3[0] . '_full.' . $explode2);

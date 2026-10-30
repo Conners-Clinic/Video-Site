@@ -16,7 +16,7 @@ foreach ($langs__footer as $key => $language) {
         $langs_modal_html .=  '<li class="language_select"><a href="?lang=' . $language . '" rel="nofollow" class="' . $language . '">' . $language_ . '</a></li>';
     }
 }
-$pt->langs = $langs_modal_html;
+$pt->lang_modal_html = $langs_modal_html;
 
 $content_data = [
     'CONTAINER_TITLE' => $pt->title,

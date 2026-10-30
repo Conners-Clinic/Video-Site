@@ -953,7 +953,7 @@ if ($first == 'add-field') {
         );
         if (!empty($_POST['options'])) {
             $options              = @explode("\n", trim($_POST['options']));
-            $re_data['options']   = PT_Secure(implode($options, ','));
+            $re_data['options']   = PT_Secure(implode(',', $options));
         }
 
         $re_data['type']    = $type;
@@ -1027,7 +1027,7 @@ if ($first == 'update-field') {
 
         if (!empty($_POST['options'])) {
             $options            = @explode("\n", trim($_POST['options']));
-            $up_data['options'] = implode($options, ',');
+            $up_data['options'] = implode(',', $options);
             $up_data['type']    = 'select';
         }
 
