@@ -1,0 +1,14 @@
+---
+title: Video Site
+roadmap: null
+context: [{doc: docs/SEO_CONTENT_PIPELINE.md, why: "how transcripts become SEO articles (setup, cron, settings)"}, {doc: docs/TRANSCRIPTION.md, why: batch Whisper transcription and the watch-page tabs}, {doc: AGENTS.md, why: "public-repository rule, deploy branches and the Continuity section"}]
+---
+## Goal
+
+Conners Clinic's self-hosted video platform (PlayTube-based PHP) at videos.connersclinic.com: video library and watch pages, an admin panel, Whisper transcription with About and Transcript tabs, and an SEO content pipeline that turns transcripts into articles.
+
+## Notes
+
+- Public repository (owner's decision 2026-10-30 to keep Continuity notes here): write nothing private in .continuity/.
+- Deploys: pushing main updates the test site, pushing super the live site (.github/workflows/deploy.yml); pushes that change only Continuity files are skipped.
+- A Conners Clinic developer is working on PHP 8.2 compatibility (branches php82-staging-20261030 and php82-prod-20261030, 2026-10-30).
