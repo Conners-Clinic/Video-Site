@@ -1,0 +1,6 @@
+nudge: true
+nudge_minutes: 20
+done_at_default: implemented
+skills_mode: link
+deploy_rule: none
+secret_scan: true
