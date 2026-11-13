@@ -11,6 +11,7 @@ Run once in phpMyAdmin (**select database `3595_connersclinic` first**):
 3. `migrations/2029_video_key_takeaways.sql` — `key_takeaways` JSON on `video_transcripts`  
 4. `migrations/2030_watch_page_cta_config.sql` — global watch-page top CTA in `config`  
 5. `migrations/2031_watch_cta_secondary.sql` — secondary watch-page CTA in `config`
+6. `migrations/2032_ai_usage_and_job_locks.sql` — per-call cost columns, queue claim timestamp, description backup (see `docs/AI_PIPELINE_MODERNIZATION.md`)
 
 Fresh installs: run migrations on existing databases; defaults apply even before migration via PHP fallbacks.
 
@@ -33,7 +34,7 @@ There is no minimum interval in code. Avoid `* * * * *` (every minute) unless th
 **Admin Panel → Tools → Transcribe Videos**
 
 1. Enable **Transcription system**; configure Whisper/Python if available on server.  
-2. Set **OpenAI API key** and model (`gpt-4o-mini` recommended).  
+2. Set **OpenAI API key**. Models are per stage and default from `content-pipeline/config/pipeline-models.json` (summary: `gpt-6-luna`); the old single "OpenAI model" setting is no longer used.  
 3. Set **Clinic CTA** HTML (database descriptions), **Watch page CTA card** (headline, body, button, trust labels), and **description mode** (see below).  
 4. **Test OpenAI** to confirm API access.  
 5. Enqueue videos by **channel**; cron runs Whisper.  
@@ -49,6 +50,8 @@ There is no minimum interval in code. Avoid `* * * * *` (every minute) unless th
 | `display_only` | Unchanged; tabs on watch page only |
 
 Full transcript is **never** written to `videos.description`.
+
+Descriptions are **not** rewritten automatically after transcription any more (setting "Rewrite video descriptions automatically", default off). Use **Apply descriptions** deliberately; the original description is saved in `video_transcripts.description_backup` the first time (after migration 2032).
 
 ## Watch page layout
 
@@ -69,7 +72,7 @@ Meta / Open Graph descriptions use the SEO summary when available (~220 chars).
 
 ### Reprocess older videos for takeaways
 
-**Admin Panel → Tools → Transcribe Videos → Generate SEO summaries** now also picks completed transcripts missing `key_takeaways`. Each run calls OpenAI again for that video (summary + takeaways). Process in batches of 10–25.
+**Admin Panel → Tools → Transcribe Videos → Generate SEO summaries** now also picks completed transcripts missing `key_takeaways`. Each run calls OpenAI again for that video (summary + takeaways) using the **complete** transcript. Process in batches of 10–25. To redo a single video (even one that already has a summary) use "Regenerate ONE video's summary"; it never re-runs Whisper and never touches the description.
 
 ## Server load monitoring
 
