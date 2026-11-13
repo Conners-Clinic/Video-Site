@@ -44,6 +44,16 @@ $is_owner = false;
 if ($_POST['user_id'] == $user->id || PT_IsAdmin()) {
     $is_owner = true;
 }
+$owner_actions = array('change_price', 'save_ads', 'general', 'profile', 'change-pass', 'avatar', 'delete', 'privacy', 're_cover');
+if (in_array($first, $owner_actions, true) && !$is_owner) {
+    http_response_code(403);
+    $data = array('status' => 403, 'message' => 'Not authorized');
+    return;
+}
+if (PT_IsAdmin() && in_array($first, $owner_actions, true)) {
+    PT_RequireAdminCsrf();
+}
+
 if ($first == 'change_price') {
     if (!empty($_POST['subscriber_price']) && (!is_numeric($_POST['subscriber_price']) || $_POST['subscriber_price'] < 0)) {
         $errors[] = $error_icon . $lang->please_check_details;
@@ -305,7 +315,7 @@ if ($first == 'general') {
                     }
                 }
               
-                if (!empty($_POST['verified'])) {
+                if (!empty($_POST['verified']) && PT_IsAdmin()) {
                     if ($_POST['verified'] == 'verified') {
                         $verification = 1;
                     } else {
@@ -418,28 +428,13 @@ if ($first == 'change-pass') {
         } else {
             if (!PT_IsAdmin() || (PT_IsAdmin() && $user_data->admin == 1)) {
                 $password = $_POST['current_password'];
-                $hash                = 'sha1';
-                if (strlen($user_data->password) == 60) {
-                    $hash = 'password_hash';
-                }
-                $logged = false;
-                if ($hash == 'password_hash') {
-                    if (password_verify($password, $user_data->password)) {
-                        $logged = true;
-                    }
-                    else{
-                        $errors[] = $error_icon . $lang->current_password_dont_match;
-                    }
-                } else {
-                    $login_password = $hash(PT_Secure($password));
-                    if ($user_data->password != $login_password) {
-                        $errors[] = $error_icon . $lang->current_password_dont_match;
-                    }
+                if (!PT_VerifyPassword($password, $user_data->password)) {
+                    $errors[] = $error_icon . $lang->current_password_dont_match;
                 }
             }
 
                 
-            if (strlen($_POST['new_password']) < 4) {
+            if (strlen($_POST['new_password']) < 6 || strlen($_POST['new_password']) > 72) {
                 $errors[] = $error_icon . $lang->password_is_short;
             }
             if ($_POST['new_password'] != $_POST['confirm_new_password']) {
@@ -452,6 +447,7 @@ if ($first == 'change-pass') {
                 if ($is_owner == true) {
                     $update = $db->where('id', PT_Secure($_POST['user_id']))->update(T_USERS, $update_data);
                     if ($update) {
+                        $db->where('user_id', $user_data->id)->delete(T_SESSIONS);
                        $data = array(
                             'status' => 200,
                             'message' => $success_icon . $lang->setting_updated
@@ -512,19 +508,8 @@ if ($first == 'delete' && $pt->config->delete_account == 'on') {
     $user_data = PT_UserData($_POST['user_id']);
     if (!empty($user_data->id)) {
 
-        $hash                = 'sha1';
-        if (strlen($user_data->password) == 60) {
-            $hash = 'password_hash';
-        }
-        if ($hash == 'sha1') {
-            if ($user_data->password != sha1($_POST['current_password'])) {
-                $errors[] = $error_icon . $lang->current_password_dont_match;
-            }
-        }
-        else{
-            if (!password_verify($_POST['current_password'], $user_data->password)) {
-                $errors[] = $error_icon . $lang->current_password_dont_match;
-            }
+        if (!PT_VerifyPassword($_POST['current_password'] ?? null, $user_data->password)) {
+            $errors[] = $error_icon . $lang->current_password_dont_match;
         }
         
         if (empty($errors) && $is_owner == true) {

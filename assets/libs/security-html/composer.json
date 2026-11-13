@@ -1,0 +1,13 @@
+{
+  "name": "connersclinic/article-html-security",
+  "description": "Server-side article HTML sanitization",
+  "require": {
+    "ezyang/htmlpurifier": "^4.19"
+  },
+  "config": {
+    "platform": {
+      "php": "8.2.35"
+    },
+    "allow-plugins": false
+  }
+}

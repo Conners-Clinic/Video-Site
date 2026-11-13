@@ -566,13 +566,13 @@ function PT_GenerateKey($minlength = 20, $maxlength = 20, $uselower = true, $use
         $charset .= "~@#$%^*()_+-={}|][";
     }
     if ($minlength > $maxlength) {
-        $length = mt_rand($maxlength, $minlength);
+        $length = random_int($maxlength, $minlength);
     } else {
-        $length = mt_rand($minlength, $maxlength);
+        $length = random_int($minlength, $maxlength);
     }
     $key = '';
     for ($i = 0; $i < $length; $i++) {
-        $key .= $charset[(mt_rand(0, strlen($charset) - 1))];
+        $key .= $charset[(random_int(0, strlen($charset) - 1))];
     }
     return $key;
 }
@@ -770,13 +770,7 @@ function covtime($youtube_time) {
 }
 
 function PT_CreateSession() {
-    $hash = sha1(rand(1111, 9999));
-    if (!empty($_SESSION['hash_id'])) {
-        $_SESSION['hash_id'] = $_SESSION['hash_id'];
-        return $_SESSION['hash_id'];
-    }
-    $_SESSION['hash_id'] = $hash;
-    return $hash;
+    return PT_SecurityToken('hash_id');
 }
 function PT_ShortText($text = "", $len = 100) {
     if (empty($text) || !is_string($text) || !is_numeric($len) || $len < 1) {
@@ -1126,49 +1120,12 @@ function pt_redirect($url) {
 }
 
 function connect_to_url($url = '', $config = array()) {
-    if (empty($url)) {
-        return false;
-    }
-    $curl = curl_init($url);
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows; U; Windows NT 5.0; en-US; rv:1.7.12) Gecko/20050915 Firefox/1.0.7");
-    if (!empty($config['POST'])) {
-        curl_setopt($curl, CURLOPT_POST, 1);
-        curl_setopt($curl, CURLOPT_POSTFIELDS, $config['POST']);
-    }
-    if (!empty($config['bearer'])) {
-        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
-            'Authorization: Bearer ' . $config['bearer']
-        ));
-    }
-    //execute the session
-    $curl_response = curl_exec($curl);
-    //finish off the session
-    curl_close($curl);
-    return $curl_response;
+    return PT_SecurityRemoteRequest($url, $config);
 }
 
 function connect_to_url_headers($url = '', $config = array()) {
-    if (empty($url)) {
-        return false;
-    }
-    $curl = curl_init($url);
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($curl, CURLOPT_TIMEOUT, 10);
-    curl_setopt($curl, CURLOPT_POST, 0);
-    curl_setopt($curl, CURLOPT_HEADER, 1);
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($curl, CURLOPT_FOLLOWLOCATION, 1);
-
-    //execute the session
-    $curl_response = curl_exec($curl);
-    //finish off the session
-    curl_close($curl);
-
+    $curl_response = PT_SecurityRemoteRequest($url, $config, true);
+    if ($curl_response === false) { return array(); }
     $headers = [];
     $curl_response = rtrim($curl_response);
     $data = explode("\n",$curl_response);
@@ -1344,8 +1301,12 @@ function pt_get_notification($args = array()){
 function ffmpeg_duration($filename = false){
     global $pt;
 
-    $ffmpeg_b = $pt->config->ffmpeg_binary_file;
-    $output   = shell_exec("$ffmpeg_b -i {$filename} 2>&1");
+    if (!is_string($filename) || $filename === '' || strpos($filename, "\0") !== false) {
+        return 30;
+    }
+    $ffmpeg_b = escapeshellarg('/usr/bin/ffmpeg');
+    $filename_arg = escapeshellarg($filename);
+    $output = shell_exec("$ffmpeg_b -i $filename_arg 2>&1");
     $ptrn     = '/Duration: ([0-9]{2}):([0-9]{2}):([^ ,])+/';
     $time     = 30;
     if (preg_match($ptrn, $output, $matches)) {
@@ -1659,12 +1620,24 @@ function uploadChunk($fileUploadName, $fileUploadFolder = "uploads") {
     if (empty($_FILES) || $_FILES["video"]['error']) {
         index(0, "Failed to move uploaded file: " . ($_FILES["video"]['error']) ? $_FILES["video"]['error'] : "");
     }
+    if (!isset($_FILES['video']['tmp_name']) || !is_string($_FILES['video']['tmp_name']) ||
+        !is_uploaded_file($_FILES['video']['tmp_name']) ||
+        !is_string($fileUploadName) || !preg_match('/\A[a-zA-Z0-9_-]+\.[a-zA-Z0-9]{2,5}\z/D', $fileUploadName) ||
+        !is_string($fileUploadFolder) || !preg_match('#\Aupload/(?:videos|photos)/[0-9]{4}/[0-9]{2}\z#D', $fileUploadFolder)) {
+        index(0, 'Invalid upload destination');
+    }
     // THE UPLOAD DESITINATION - CHANGE THIS TO YOUR OWN
     $filePath = $fileUploadFolder;
     if (!file_exists($filePath)) { 
         if (!mkdir($filePath, 0777, true)) {
             index(0, "Failed to create $filePath");
         }
+    }
+    $uploadRoot = realpath(__DIR__ . '/../../upload');
+    $uploadFolder = realpath($filePath);
+    if ($uploadRoot === false || $uploadFolder === false ||
+        strpos($uploadFolder, $uploadRoot . DIRECTORY_SEPARATOR) !== 0 || is_link($filePath)) {
+        index(0, 'Upload destination is outside media storage');
     }
     $fileName = $fileUploadName;
     $filePath = $filePath . DIRECTORY_SEPARATOR . $fileName;

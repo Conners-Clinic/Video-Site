@@ -118,7 +118,8 @@ else{
 
         if (!empty($video)) {
             $pt->config->s3_upload = $default_amazon;
-            $ffmpeg_b      = $pt->config->ffmpeg_binary_file;
+            $ffmpeg_b      = escapeshellarg($pt->config->ffmpeg_binary_file);
+            $ffmpeg_preset_arg = escapeshellarg($pt->config->convert_speed);
             $total_seconds = ffmpeg_duration($filename);
             $thumb_1_duration = (int) ($total_seconds > 10) ? 11 : 1;
             $thumb_2_duration = (int) ($total_seconds > 24) ? 25 : 15;
@@ -146,7 +147,10 @@ else{
                 $input_path = $full_dir . $file_upload['filename'];
                 $output_path = $full_dir . $thumb;
 
-                $output_thumb = shell_exec("$ffmpeg_b -ss \"$i\" -i $input_path -vframes 1 -f mjpeg $output_path 2<&1");
+                $input_path_arg = escapeshellarg($input_path);
+                $output_path_arg = escapeshellarg($output_path);
+                $thumb_time_arg = escapeshellarg((string) $i);
+                $output_thumb = shell_exec("$ffmpeg_b -ss $thumb_time_arg -i $input_path_arg -vframes 1 -f mjpeg $output_path_arg 2>&1");
 
                 if (file_exists($thumb) && !empty(@getimagesize($thumb))) {
                     if ($pt->config->shorts_system == 'on' && !empty($_REQUEST['is_short']) && $_REQUEST['is_short'] == 'yes') {
@@ -177,7 +181,9 @@ else{
             $video_file_full_path       = $full_dir . $filename;
             if (!empty($_REQUEST['is_short']) && $_REQUEST['is_short'] == 'yes') {
               $video_output_full_path_144 = $full_dir . $filepath . "_144p_converted.mp4";
-              $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=256:-2 -crf 26 $video_output_full_path_144 2>&1");
+              $video_file_full_path_arg = escapeshellarg($video_file_full_path);
+              $video_output_full_path_144_arg = escapeshellarg($video_output_full_path_144);
+              $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=256:-2 -crf 26 $video_output_full_path_144_arg 2>&1");
               $data['full_file_path'] = PT_GetMedia($filepath . "_144p_converted.mp4");
 
               $getFileName = substr($filepath . "_144p_converted.mp4", strrpos($filepath . "_144p_converted.mp4", '/') + 1);

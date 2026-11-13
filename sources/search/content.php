@@ -1,4 +1,10 @@
 <?php
+// Categories are database identifiers, never SQL fragments.
+if (isset($_POST['category']) && $_POST['category'] !== '') {
+    $security_ids = PT_SecurityIdList($_POST['category'], true);
+    if ($security_ids === false) { PT_SecurityBadInput(); }
+    $_POST['category'] = $security_ids;
+}
 if (empty($_GET['keyword'])) {
 	header("Location: " . PT_Link('login'));
     exit();

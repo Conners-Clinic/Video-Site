@@ -64,26 +64,13 @@ else{
 
     else {
 
-        if (!empty($_POST['type']) && $_POST['type'] == 'paid') {
-            $user2 = PT_UserData($id);
-            if (!empty($user2) && $user2->subscriber_price > 0) {
-
-                $admin__com = ($pt->config->admin_com_subscribers * $user2->subscriber_price)/100;
-                $paypal_currency = $pt->config->payment_currency.'_PERCENT';
-                $payment_data         = array(
-                    'user_id' => $id,
-                    'video_id'    => 0,
-                    'paid_id'  => $pt->user->id,
-                    'amount'    => $user2->subscriber_price,
-                    'admin_com'    => $pt->config->admin_com_subscribers,
-                    'currency'    => $paypal_currency,
-                    'time'  => time(),
-                    'type' => 'subscribe'
-                );
-                $db->insert(T_VIDEOS_TRSNS,$payment_data);
-                $balance = $user2->subscriber_price - $admin__com;
-                $db->rawQuery("UPDATE ".T_USERS." SET `balance` = `balance`+ '".$balance."' WHERE `id` = '".$id."'");
-            }
+        $channel = PT_UserData((int) $id);
+        if (empty($channel) || (float) $channel->subscriber_price > 0 || (!empty($_POST['type']) && $_POST['type'] === 'paid')) {
+            http_response_code(403);
+            $response_data = array('api_status' => '403', 'api_version' => $api_version,
+                'errors' => array('error_id' => 'payment_verification_required',
+                    'error_text' => 'Complete payment through the verified website checkout.'));
+            return;
         }
 
         $insert_data  = array(

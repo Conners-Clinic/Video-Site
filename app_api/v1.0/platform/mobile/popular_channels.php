@@ -73,8 +73,11 @@ else{
 
     if ($type == 'views') {
         if (!empty($_POST['channels_ids']) && !empty($_POST['last_count'])) {
-            $ids = PT_Secure($_POST['channels_ids']);
-            $last_count = PT_Secure($_POST['last_count']);
+            $security_ids = PT_SecurityIdList($_POST['channels_ids'], true);
+            if ($security_ids === false) { PT_SecurityBadInput(); }
+            $ids = $security_ids ? implode(',', $security_ids) : '0';
+            if ((!is_string($_POST['last_count']) && !is_int($_POST['last_count'])) || !preg_match('/\A[0-9]{1,18}\z/D', (string) $_POST['last_count'])) { PT_SecurityBadInput(); }
+            $last_count = (int) $_POST['last_count'];
             if ($sort_type == 'all_time') {
                 $videos = $db->rawQuery('SELECT user_id, SUM(views) AS count FROM '.T_VIDEOS.' WHERE user_id NOT IN ('.$ids.') AND user_id NOT IN ('.implode(",", $pt->blocked_array).') GROUP BY user_id HAVING count <= '.$last_count.' ORDER BY count DESC LIMIT '.$limit);
             }
@@ -94,8 +97,11 @@ else{
     }
     elseif ($type == 'subscribers') {
         if (!empty($_POST['channels_ids']) && !empty($_POST['last_count'])) {
-            $ids = PT_Secure($_POST['channels_ids']);
-            $last_count = PT_Secure($_POST['last_count']);
+            $security_ids = PT_SecurityIdList($_POST['channels_ids'], true);
+            if ($security_ids === false) { PT_SecurityBadInput(); }
+            $ids = $security_ids ? implode(',', $security_ids) : '0';
+            if ((!is_string($_POST['last_count']) && !is_int($_POST['last_count'])) || !preg_match('/\A[0-9]{1,18}\z/D', (string) $_POST['last_count'])) { PT_SecurityBadInput(); }
+            $last_count = (int) $_POST['last_count'];
             if ($sort_type == 'all_time') {
                 $videos = $db->rawQuery('SELECT user_id, COUNT(*) AS count FROM '.T_SUBSCRIPTIONS.' WHERE user_id NOT IN ('.$ids.') AND user_id NOT IN ('.implode(",", $pt->blocked_array).') GROUP BY user_id HAVING count <= '.$last_count.' ORDER BY count DESC LIMIT '.$limit);
             }
@@ -124,8 +130,11 @@ else{
         $db->where('active_expire', time(),'<=')->update(T_USERS,array('active_expire' => $week_end,
                                                                        'active_time' => 0));
         if (!empty($_POST['channels_ids']) && !empty($_POST['last_count'])) {
-            $ids = PT_Secure($_POST['channels_ids']);
-            $last_count = PT_Secure($_POST['last_count']);
+            $security_ids = PT_SecurityIdList($_POST['channels_ids'], true);
+            if ($security_ids === false) { PT_SecurityBadInput(); }
+            $ids = $security_ids ? implode(',', $security_ids) : '0';
+            if ((!is_string($_POST['last_count']) && !is_int($_POST['last_count'])) || !preg_match('/\A[0-9]{1,18}\z/D', (string) $_POST['last_count'])) { PT_SecurityBadInput(); }
+            $last_count = (int) $_POST['last_count'];
             $videos = $db->rawQuery('SELECT * FROM '.T_USERS.' WHERE id NOT IN ('.$ids.') AND active_time <> 0  AND active_time <= '.$last_count.' AND id NOT IN ('.implode(",", $pt->blocked_array).') ORDER BY active_time DESC LIMIT '.$limit);
         }
         else{

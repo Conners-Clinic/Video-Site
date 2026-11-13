@@ -1,4 +1,6 @@
 <?php
+$blocked_query_ids = PT_SecurityIdList($pt->blocked_array ?? array());
+if ($blocked_query_ids === false) { PT_SecurityBadInput(); }
 if (empty($_GET['id'])) {
     header("Location: " . PT_Link('404'));
     exit();
@@ -188,12 +190,10 @@ $next_video     = '';
 // else{
     $next_up_videos = array();
     if (!empty($_COOKIE['next_up_videos'])) {
-        $n_videos = json_decode($_COOKIE['next_up_videos'],true);
-        foreach ($n_videos as $key => $value) {
-            if (is_numeric($value)) {
-                $next_up_videos[] = PT_Secure($value);
-            }
-        }
+        $n_videos = is_string($_COOKIE['next_up_videos']) && strlen($_COOKIE['next_up_videos']) <= 8192
+            ? json_decode($_COOKIE['next_up_videos'], true) : array();
+        $safe_next_ids = PT_SecurityIdList($n_videos);
+        $next_up_videos = $safe_next_ids === false ? array() : $safe_next_ids;
         if (!in_array($get_video->id, $next_up_videos)) {
             $next_up_videos[] =  $get_video->id;
         }
@@ -210,12 +210,12 @@ $next_video     = '';
 
 $query_video_title = PT_Secure($get_video->title);
 
-$next_up_videos    = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE MATCH (title) AGAINST ('$query_video_title') AND user_id NOT IN (".implode(',', $pt->blocked_array).") AND id <> '{$get_video->id}' $not_in_query AND is_movie = 0 AND privacy = 0 AND is_short = 0 ORDER BY `id` DESC LIMIT 1");
+$next_up_videos    = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE MATCH (title) AGAINST (?) AND user_id NOT IN (".implode(',', $blocked_query_ids ?: array(0)).") AND id <> ? $not_in_query AND is_movie = 0 AND privacy = 0 AND is_short = 0 ORDER BY `id` DESC LIMIT 1", array($query_video_title, (int) $get_video->id));
 
 // Up-next HTML is built with related videos below (capped at $watch_sidebar_initial_limit).
 
 $watch_sidebar_initial_limit = 8;
-$related_videos    = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE MATCH (title) AGAINST ('$query_video_title') AND user_id NOT IN (".implode(',', $pt->blocked_array).") AND id <> '{$get_video->id}' AND is_movie = 0 AND privacy = 0 AND is_short = 0 ORDER BY `id` DESC LIMIT " . (int) $watch_sidebar_initial_limit);
+$related_videos    = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE MATCH (title) AGAINST (?) AND user_id NOT IN (".implode(',', $blocked_query_ids ?: array(0)).") AND id <> ? AND is_movie = 0 AND privacy = 0 AND is_short = 0 ORDER BY `id` DESC LIMIT " . (int) $watch_sidebar_initial_limit, array($query_video_title, (int) $get_video->id));
 
 if (empty($related_videos)) {
     // if (!empty($not_in) && !empty($_SESSION['next_video'])) {

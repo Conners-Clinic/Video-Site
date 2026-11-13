@@ -1,9 +1,10 @@
 <?php
 namespace Aws;
 
-use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\FnStream;
+use GuzzleHttp\Utils;
 use Psr\Http\Message\RequestInterface;
-use GuzzleHttp\ClientInterface;
+use Psr\Http\Message\StreamInterface;
 use GuzzleHttp\Promise\FulfilledPromise;
 
 //-----------------------------------------------------------------------------
@@ -269,22 +270,17 @@ function describe_type($input)
 /**
  * Creates a default HTTP handler based on the available clients.
  *
+ * @param string|null $transportSharing Optional transport sharing mode
+ *        ("none", "handler_prefer", "handler_require", "persistent_prefer",
+ *        or "persistent_require") to apply to the underlying HTTP client.
+ *        The "*_prefer" modes degrade gracefully when the installed version
+ *        of Guzzle cannot honor them, and the "*_require" modes throw.
+ *
  * @return callable
  */
-function default_http_handler()
+function default_http_handler(?string $transportSharing = null)
 {
-    $version = guzzle_major_version();
-    // If Guzzle 6 or 7 installed
-    if ($version === 6 || $version === 7) {
-        return new \Aws\Handler\GuzzleV6\GuzzleHandler();
-    }
-
-    // If Guzzle 5 installed
-    if ($version === 5) {
-        return new \Aws\Handler\GuzzleV5\GuzzleHandler();
-    }
-
-    throw new \RuntimeException('Unknown Guzzle version: ' . $version);
+    return new \Aws\Handler\Guzzle\GuzzleHandler(null, $transportSharing);
 }
 
 /**
@@ -294,47 +290,7 @@ function default_http_handler()
  */
 function default_user_agent()
 {
-    $version = guzzle_major_version();
-    // If Guzzle 6 or 7 installed
-    if ($version === 6 || $version === 7) {
-        return \GuzzleHttp\default_user_agent();
-    }
-
-    // If Guzzle 5 installed
-    if ($version === 5) {
-        return \GuzzleHttp\Client::getDefaultUserAgent();
-    }
-
-    throw new \RuntimeException('Unknown Guzzle version: ' . $version);
-}
-
-/**
- * Get the major version of guzzle that is installed.
- *
- * @internal This function is internal and should not be used outside aws/aws-sdk-php.
- * @return int
- * @throws \RuntimeException
- */
-function guzzle_major_version()
-{
-    static $cache = null;
-    if (null !== $cache) {
-        return $cache;
-    }
-
-    if (defined('\GuzzleHttp\ClientInterface::VERSION')) {
-        $version = (string) ClientInterface::VERSION;
-        if ($version[0] === '6') {
-            return $cache = 6;
-        }
-        if ($version[0] === '5') {
-            return $cache = 5;
-        }
-    } elseif (defined('\GuzzleHttp\ClientInterface::MAJOR_VERSION')) {
-        return $cache = ClientInterface::MAJOR_VERSION;
-    }
-
-    throw new \RuntimeException('Unable to determine what Guzzle version is installed.');
+    return Utils::defaultUserAgent();
 }
 
 /**
@@ -444,8 +400,9 @@ function is_valid_hostlabel($label)
 }
 
 /**
- * Ignores '#' full line comments, which parse_ini_file no longer does
- * in PHP 7+.
+ * Parses INI files while supporting additional equals signs in values.
+ * Ignores '#' full line comments, which parse_ini_file no longer does in
+ * PHP 7+.
  *
  * @param $filename
  * @param bool $process_sections
@@ -457,11 +414,178 @@ function parse_ini_file(
     $process_sections = false,
     $scanner_mode = INI_SCANNER_NORMAL)
 {
-    return parse_ini_string(
-        preg_replace('/^#.*\\n/m', "", file_get_contents($filename)),
+    $contents = preg_replace(
+        '/^#.*\\n/m',
+        "",
+        file_get_contents($filename)
+    );
+    if ($scanner_mode === INI_SCANNER_RAW) {
+        return parse_ini_string(
+            $contents,
+            $process_sections,
+            $scanner_mode
+        );
+    }
+
+    $data = @parse_ini_string(
+        $contents,
         $process_sections,
         $scanner_mode
     );
+    if ($data !== false) {
+        return $data;
+    }
+
+    // NORMAL and TYPED reject additional unquoted equals signs. Parse those
+    // values as raw strings while retaining the requested mode for other keys.
+    $protectedValues = [];
+    $tokenPrefix = '__AWS_SDK_PHP_INI_VALUE_';
+    while (strpos($contents, $tokenPrefix) !== false) {
+        $tokenPrefix .= '_';
+    }
+
+    $findAssignment = static function (string $line): ?array {
+        $length = strlen($line);
+        $offset = strspn($line, " \t");
+        if ($offset === $length
+            || $line[$offset] === ';'
+            || $line[$offset] === '#'
+            || $line[$offset] === '['
+        ) {
+            return null;
+        }
+
+        $quote = null;
+        $offsetDepth = 0;
+        for ($i = $offset; $i < $length; $i++) {
+            if ($quote === '"' && $line[$i] === '\\') {
+                $i++;
+            } elseif ($line[$i] === $quote) {
+                $quote = null;
+            } elseif ($quote === null) {
+                if ($line[$i] === '"' || $line[$i] === "'") {
+                    $quote = $line[$i];
+                } elseif ($line[$i] === '[') {
+                    $offsetDepth++;
+                } elseif ($line[$i] === ']' && $offsetDepth > 0) {
+                    $offsetDepth--;
+                } elseif ($line[$i] === '=' && $offsetDepth === 0) {
+                    return [
+                        substr($line, 0, $i + 1),
+                        substr($line, $i + 1),
+                    ];
+                }
+            }
+        }
+
+        return null;
+    };
+    $updateQuoteState = static function (
+        string $value,
+        ?string $quote = null
+    ): ?string {
+        $length = strlen($value);
+        for ($i = 0; $i < $length; $i++) {
+            if ($quote === '"' && $value[$i] === '\\') {
+                $i++;
+            } elseif ($value[$i] === $quote) {
+                $quote = null;
+            } elseif ($quote === null) {
+                if ($value[$i] === ';') {
+                    break;
+                }
+                if ($value[$i] === '"' || $value[$i] === "'") {
+                    $quote = $value[$i];
+                }
+            }
+        }
+
+        return $quote;
+    };
+    $lines = preg_split(
+        '/(\r\n|\n|\r)/',
+        $contents,
+        -1,
+        PREG_SPLIT_DELIM_CAPTURE
+    );
+    $multilineQuote = null;
+    foreach ($lines as $index => &$line) {
+        if ($index % 2 !== 0) {
+            continue;
+        }
+        if ($multilineQuote !== null) {
+            $multilineQuote = $updateQuoteState($line, $multilineQuote);
+            continue;
+        }
+        $assignment = $findAssignment($line);
+        if ($assignment === null) {
+            continue;
+        }
+        [$assignmentPrefix, $assignmentValue] = $assignment;
+
+        $parsedValue = @parse_ini_string(
+            'value=' . $assignmentValue,
+            false,
+            $scanner_mode
+        );
+        if ($parsedValue !== false) {
+            continue;
+        }
+
+        $hasAdditionalEquals = strpos($assignmentValue, '=') !== false;
+        if (!$hasAdditionalEquals) {
+            $multilineQuote = $updateQuoteState($assignmentValue);
+            continue;
+        }
+
+        $trimmedValue = ltrim($assignmentValue);
+        if ($trimmedValue !== ''
+            && ($trimmedValue[0] === '"' || $trimmedValue[0] === "'")
+        ) {
+            $multilineQuote = $updateQuoteState($assignmentValue);
+            if ($multilineQuote !== null) {
+                continue;
+            }
+        }
+
+        $parsed = @parse_ini_string(
+            'value=' . $assignmentValue,
+            false,
+            INI_SCANNER_RAW
+        );
+        if ($parsed === false
+            || strpos($parsed['value'], '=') === false
+        ) {
+            continue;
+        }
+
+        $token = $tokenPrefix . count($protectedValues) . '__';
+        $protectedValues[$token] = $parsed['value'];
+        $line = $assignmentPrefix . '"' . $token . '"';
+    }
+    unset($line);
+
+    $data = parse_ini_string(
+        implode('', $lines),
+        $process_sections,
+        $scanner_mode
+    );
+    if ($data === false || empty($protectedValues)) {
+        return $data;
+    }
+
+    array_walk_recursive(
+        $data,
+        function (mixed &$value) use ($protectedValues): void {
+            if (is_string($value)
+                && array_key_exists($value, $protectedValues)
+            ) {
+                $value = $protectedValues[$value];
+            }
+        }
+    );
+
+    return $data;
 }
 
 /**
@@ -504,6 +628,67 @@ function boolean_value($input)
 }
 
 /**
+ * Parses ini sections with subsections (i.e. the service section)
+ *
+ * @param $filename
+ * @param $filename
+ * @return array
+ */
+function parse_ini_section_with_subsections($filename, $section_name) {
+    $config = [];
+    $stream = fopen($filename, 'r');
+
+    if (!$stream) {
+        return $config;
+    }
+
+    $current_subsection = '';
+
+    while (!feof($stream)) {
+        $line = trim(fgets($stream));
+
+        if (empty($line) || in_array($line[0], [';', '#'])) {
+            continue;
+        }
+
+        if (preg_match('/^\[.*\]$/', $line)
+            && trim($line, '[]') === $section_name)
+        {
+            while (!feof($stream)) {
+                $line = trim(fgets($stream));
+
+                if (empty($line) || in_array($line[0], [';', '#'])) {
+                    continue;
+                }
+
+                if (preg_match('/^\[.*\]$/', $line)
+                    && trim($line, '[]') === $section_name)
+                {
+                    continue;
+                } elseif (strpos($line, '[') === 0) {
+                    break;
+                }
+
+                if (strpos($line, ' = ') !== false) {
+                    list($key, $value) = explode(' = ', $line, 2);
+                    if (empty($current_subsection)) {
+                        $config[$key] = $value;
+                    } else {
+                        $config[$current_subsection][$key] = $value;
+                    }
+                } else {
+                    $current_subsection = trim(str_replace('=', '', $line));
+                    $config[$current_subsection] = [];
+                }
+            }
+        }
+    }
+
+    fclose($stream);
+    return $config;
+}
+
+/**
  * Checks if an input is a valid epoch time
  *
  * @param $input
@@ -542,3 +727,35 @@ function strip_fips_pseudo_regions($region)
     return str_replace(['fips-', '-fips'], ['', ''], $region);
 }
 
+/**
+ * Checks if an array is associative
+ *
+ * @param array $array
+ *
+ * @return bool
+ */
+function is_associative(array $array): bool
+{
+    if (empty($array)) {
+        return false;
+    }
+
+    return !array_is_list($array);
+}
+
+/**
+ * Decorates a PSR-7 stream so close() detaches the underlying resource
+ * instead of fclose()-ing it. Use at sites where the SDK wraps a
+ * user-owned PHP resource.
+ *
+ * @param StreamInterface $stream
+ * @return StreamInterface
+ */
+function detach_on_close_stream(StreamInterface $stream): StreamInterface
+{
+    return FnStream::decorate($stream, [
+        'close' => static function () use ($stream) {
+            $stream->detach();
+        },
+    ]);
+}

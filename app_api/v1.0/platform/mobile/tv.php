@@ -13,7 +13,7 @@ if (!empty($_POST['type']) && in_array($_POST['type'], $types)) {
 			);
 		}
 		else{
-			$code = generateRandomString(7);
+			$code = bin2hex(random_bytes(5));
 			$db->where('id',$pt->user->id)->update(T_USERS,array('tv_code' => $code));
 			$response_data     = array(
 			    'api_status'   => '200',
@@ -24,11 +24,15 @@ if (!empty($_POST['type']) && in_array($_POST['type'], $types)) {
 		}
 	}
 	elseif ($_POST['type'] == 'login') {
-		if (!empty($_POST['code'])) {
+		if (!empty($_POST['code']) && is_string($_POST['code']) && preg_match('/\A[a-f0-9]{10}\z/D', $_POST['code'])) {
 			$code = PT_Secure($_POST['code']);
 			$user = $db->where('tv_code',$code)->getOne(T_USERS);
+            // A pairing code may authorize only one login attempt.
+            if (!empty($user) && (strlen($code) > 10 || !$db->where('id', $user->id)->where('tv_code', $code)->update(T_USERS, array('tv_code' => '')) || $db->count < 1)) {
+                $user = null;
+            }
 			if (!empty($user)) {
-		        if ($user->active == 0) {
+		        if ((int) $user->active !== 1) {
 		            $response_data       = array(
 		                'api_status'     => '304',
 		                'api_version'    => $api_version,
@@ -40,14 +44,19 @@ if (!empty($_POST['type']) && in_array($_POST['type'], $types)) {
 		                ) 
 		            );
 		        } 
-		        elseif ($pt->config->two_factor_setting == 'on' && $user->two_factor == 1) {
+		        elseif ((int) $user->two_factor === 1) {
+                if ($pt->config->two_factor_setting !== 'on' || $user->two_factor_method !== 'two_factor') {
+                    $response_data = array('api_status' => '400', 'api_version' => $api_version,
+                        'errors' => array('error_id' => '2', 'error_text' => 'Complete two-factor sign-in on the website.'));
+                    return;
+                }
 		            $email        = $user->email;
 		            $db->where("email", $email);
 		            $user_id = $db->getValue(T_USERS, "id");
 		            if (!empty($user_id)) {
 		               $rest_user = PT_UserData($user_id);
-		               $email_code = rand(111111, 999999);
-		               $hash_code = md5($email_code);
+		               $email_code = random_int(100000, 999999);
+		               $hash_code = '2fa:' . md5((string) $email_code) . ':' . time() . ':0';
 		               $update_data = array('email_code' => $hash_code);
 		               $db->where('id', $rest_user->id);
 		               $update = $db->update(T_USERS, $update_data);
@@ -80,7 +89,8 @@ if (!empty($_POST['type']) && in_array($_POST['type'], $types)) {
 		            if (!empty($_POST['device_id'])) {
 		                $db->where('id',$user->id)->update(T_USERS,array('device_id' => PT_Secure($_POST['device_id'])));
 		            }
-		            $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+		            if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+		            $session_id          = bin2hex(random_bytes(32));
 		            $platforms           = array('phone','web');
 		            foreach ($platforms as $platform_name) {
 		                $insert_data     = array(
@@ -91,6 +101,7 @@ if (!empty($_POST['type']) && in_array($_POST['type'], $types)) {
 		                );
 
 		                $insert = $db->insert(T_SESSIONS, $insert_data);
+                    if (!$insert) { $response_data = array('api_status' => '503', 'api_version' => $api_version); return; }
 		            }
 
 		            $response_data       = array(

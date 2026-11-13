@@ -1,6 +1,8 @@
 <?php 
-	$last_id       = (!empty($_GET['id']) && is_numeric($_GET['id'])) ? $_GET['id'] : 0;
-	$video_id      = (!empty($_GET['video_id']) && is_numeric($_GET['video_id'])) ? $_GET['video_id'] : 0;
+$blocked_query_ids = PT_SecurityIdList($pt->blocked_array ?? array());
+if ($blocked_query_ids === false) { PT_SecurityBadInput(); }
+	$last_id       = (!empty($_GET['id']) && is_numeric($_GET['id'])) ? (int) $_GET['id'] : 0;
+	$video_id      = (!empty($_GET['video_id']) && is_numeric($_GET['video_id'])) ? (int) $_GET['video_id'] : 0;
 	$data          = array('status' => 404);
 	$t_videos      = T_VIDEOS;
 	$video_sidebar = "";
@@ -12,15 +14,15 @@
 			$video_title    = $video_data->title;
 			$sql_query      = "
 				SELECT * FROM `$t_videos` 
-				WHERE MATCH (title) AGAINST ('$video_title') 
-				AND id <> '{$video_id}'  AND user_id NOT IN (".implode(',', $pt->blocked_array).")
-				AND id < '{$last_id}'
-				AND id <> '{$last_id}'
-				AND privacy = 0
+				WHERE MATCH (title) AGAINST (?) 
+				AND id <> ?  AND user_id NOT IN (".implode(',', $blocked_query_ids ?: array(0)).")
+				AND id < ?
+				AND id <> ?
+				AND privacy = 0 AND approved = 1
 				ORDER BY `id` DESC
 				LIMIT 8";
 
-			$related_videos = $db->rawQuery($sql_query);
+			$related_videos = $db->rawQuery($sql_query, array($video_title, $video_id, $last_id, $last_id));
 			if (count($related_videos) > 0) {
 				foreach ($related_videos as $key => $related_video) {
 				    $related_video  = PT_GetVideoByID($related_video, 0, 0, 0);

@@ -1,4 +1,5 @@
 <?php 
+require_once dirname(__DIR__, 2) . '/assets/includes/video_security.php';
 if ($pt->config->embed_system == 'off') {
     exit('Embed is disabled');
 }
@@ -6,8 +7,26 @@ if ($pt->config->embed_system == 'off') {
 if (empty($_GET['id'])) {
    exit('Invalid URL');
 }
+$_GET['color'] = isset($_GET['color']) && is_string($_GET['color']) && preg_match('/\A(?:[a-f0-9]{3}|[a-f0-9]{6})\z/Di', $_GET['color'])
+    ? strtolower($_GET['color']) : '';
 $_GET['id'] = strip_tags($_GET['id']);
 $id = PT_Secure($_GET['id']);
+
+if (strpos($id, '_') !== false) {
+    $id_array = explode('_', $id);
+    $id_html  = $id_array[1];
+    $id       = str_replace('.html', '', $id_html);
+}
+
+$get_video = $db->where('video_id', $id)->getOne(T_VIDEOS);
+if (empty($get_video)) {
+	exit('Video not found');
+}
+// Authorize the raw row before playlist expansion or any media URL is generated.
+if (!PT_SecurityCanViewVideo($get_video)) {
+    http_response_code(403);
+    exit('Video is not available');
+}
 
 $list_sidebar = '';
 $pt->is_list = false;
@@ -18,13 +37,20 @@ if(!empty($_GET['list'])){
     $list_id     = PT_Secure($_GET['list']);
 
 
-$videos = $db->rawQuery("select video_id from play_list where list_id = '$list_id'");
+$videos = $db->rawQuery("select video_id from play_list where list_id = ?", array($list_id));
 $video_list     = array();
 foreach ($videos as $video) {
 //  $video_list[] = $video->video_id;
+$pl_row = $db->where('id', (int) $video->video_id)->getOne(T_VIDEOS);
+if (empty($pl_row) || !PT_SecurityCanViewVideo($pl_row)) {
+    continue;
+}
 $pl_vid = PT_GetVideoByID($video->video_id,0,0,2);
+if (empty($pl_vid)) {
+    continue;
+}
 $vid_id = $pl_vid->video_id;
-$url = $pt->extra_config->site_url . "/embed/$vid_id?list=$list_id&color=" . $_GET['color'];
+$url = $pt->extra_config->site_url . '/embed/' . rawurlencode($vid_id) . '?' . http_build_query(array('list' => $list_id, 'color' => $_GET['color']), '', '&', PHP_QUERY_RFC3986);
         $pt->q = $pl_vid;
         $list_sidebar .= PT_LoadPage('embed/video-list', array(
             'TITLE' => $pl_vid->title,
@@ -49,16 +75,6 @@ $url = $pt->extra_config->site_url . "/embed/$vid_id?list=$list_id&color=" . $_G
 
 
 
-if (strpos($id, '_') !== false) {
-    $id_array = explode('_', $id);
-    $id_html  = $id_array[1];
-    $id       = str_replace('.html', '', $id_html);
-}
-
-$get_video = $db->where('video_id', $id)->getOne(T_VIDEOS);
-if (empty($get_video)) {
-	exit('Video not found');
-}
 if ($pt->config->require_login == 'on' && !IS_LOGGED) {
     exit('please login to watch video');
 }
@@ -150,9 +166,9 @@ if (isset($_GET['autoplay'])) {
     }
 }
 $pt->height = "100%";
-if (!empty($_GET['height'])) {
-    $_GET['height'] = strip_tags($_GET['height']);
-    $pt->height = $_GET['height'] . "px";
+if (isset($_GET['height']) && is_string($_GET['height']) && preg_match('/\A[0-9]{1,5}\z/D', $_GET['height'])
+    && (int) $_GET['height'] > 0 && (int) $_GET['height'] <= 8192) {
+    $pt->height = (int) $_GET['height'] . 'px';
 }
 $pt->fullscreen = 1;
 if (isset($_GET['fullscreen'])) {

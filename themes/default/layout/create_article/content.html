@@ -94,9 +94,10 @@
 	</div>
 </div>
 </div>
-<script src="{{CONFIG theme_url}}/js/tinymce/js/tinymce/tinymce.min.js"></script>
+<script src="{{CONFIG theme_url}}/js/tinymce/js/tinymce/tinymce.min.js?securityrev=8.10.2-20261111"></script>
+<script src="{{CONFIG site_url}}/assets/js/pt-richtext.js?securityrev=8.10.2-20261111"></script>
 <script>
-	tinymce.init({
+	PT_InitRichText({
           selector: '#text',  // change this value according to your HTML
           auto_focus: 'element1',
           relative_urls: false,

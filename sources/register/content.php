@@ -1,4 +1,5 @@
 <?php
+PT_RequireSameOriginPost($pt->config->site_url);
 if (IS_LOGGED == true) {
     header("Location: " . PT_Link(''));
     exit();
@@ -55,8 +56,8 @@ if (!empty($_POST)) {
         $errors[] = $lang->please_check_details;
     } else {
         $username        = PT_Secure($_POST['username']);
-        $password        = PT_Secure($_POST['password']);
-        $c_password      = PT_Secure($_POST['c_password']);
+        $password        = $_POST['password'];
+        $c_password      = $_POST['c_password'];
         $password_hashed = password_hash($password, PASSWORD_DEFAULT);
         $email           = PT_Secure($_POST['email']);
         $gender          = PT_Secure($_POST['gender']);
@@ -84,7 +85,7 @@ if (!empty($_POST)) {
         if ($password != $c_password) {
             $errors[] = $lang->password_not_match;
         }
-        if (strlen($password) < 4) {
+        if (strlen($password) < 6 || strlen($password) > 72) {
             $errors[] = $lang->password_is_short;
         }
         if ($pt->config->recaptcha == 'on') {
@@ -119,7 +120,7 @@ if (!empty($_POST)) {
 
         $active = ($pt->config->validation == 'on') ? 0 : 1;
         if (empty($errors)) {
-            $email_code = sha1(time() + rand(111,999));
+            $email_code = bin2hex(random_bytes(20));
             $insert_data = array(
                 'username' => $username,
                 'password' => $password_hashed,
@@ -231,7 +232,8 @@ if (!empty($_POST)) {
                             } 
                         }
                     }
-                    $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                    if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                    $session_id          = bin2hex(random_bytes(32));
                     $platform_details = serialize(getBrowser());
                     $insert_data         = array(
                         'user_id' => $user_id,
@@ -240,8 +242,9 @@ if (!empty($_POST)) {
                         'time' => time()
                     );
                     $insert              = $db->insert(T_SESSIONS, $insert_data);
-                    $_SESSION['user_id'] = $session_id;
-                    setcookie("user_id", $session_id, time() + (10 * 365 * 24 * 60 * 60), "/");
+                    if (!$insert) { http_response_code(503); return; }
+            $_SESSION['user_id'] = $session_id;
+                    setcookie("user_id", $session_id, array('expires' => time() + (30 * 24 * 60 * 60), 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
                     $pt->loggedin = true;
                     header("Location: $site_url");
                     exit();

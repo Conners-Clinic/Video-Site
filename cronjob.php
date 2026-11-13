@@ -1,6 +1,48 @@
 <?php
 require_once "./assets/init.php";
 
+// Resolve queued inputs and generated outputs inside this site's video uploads.
+function PT_CronVideoPaths($location, $document_root) {
+    if (!is_string($location) || strpos($location, 'upload/videos/') !== 0
+        || strpos($location, '\\') !== false || preg_match('/[\x00-\x1F\x7F]/', $location)) {
+        return false;
+    }
+    foreach (explode('/', $location) as $segment) {
+        if ($segment === '' || $segment === '.' || $segment === '..') {
+            return false;
+        }
+    }
+    $document_root = realpath($document_root);
+    $upload_root = $document_root === false ? false : realpath($document_root . '/upload/videos');
+    if ($upload_root === false || strpos($upload_root, $document_root . DIRECTORY_SEPARATOR) !== 0) {
+        return false;
+    }
+    $input_path = $document_root . '/' . $location;
+    $input = realpath($input_path);
+    if ($input === false || !is_file($input) || !is_readable($input) || is_link($input_path)
+        || strpos($input, $upload_root . DIRECTORY_SEPARATOR) !== 0) {
+        return false;
+    }
+    $relative_base = pathinfo($location, PATHINFO_DIRNAME) . '/' . pathinfo($location, PATHINFO_FILENAME);
+    $output_directory = realpath($document_root . '/' . pathinfo($relative_base, PATHINFO_DIRNAME));
+    if ($output_directory === false || ($output_directory !== $upload_root
+        && strpos($output_directory, $upload_root . DIRECTORY_SEPARATOR) !== 0)) {
+        return false;
+    }
+    $outputs = array();
+    foreach (array(240, 360, 480, 720, 1080, 2048, 4096) as $resolution) {
+        $output = $document_root . '/' . $relative_base . '_' . $resolution . 'p_converted.mp4';
+        if (is_link($output) || (file_exists($output) && (!is_file($output)
+            || strpos((string) realpath($output), $upload_root . DIRECTORY_SEPARATOR) !== 0))) {
+            return false;
+        }
+        $outputs[$resolution] = $output;
+    }
+    return array('input' => $input, 'relative_base' => $relative_base, 'outputs' => $outputs);
+}
+// End queued video path validation.
+
+
 // Dashboard This Year
 $type = 'This Year';
 
@@ -61,9 +103,15 @@ $update_information = PT_UpdateAdminDetails();
 $process_queue = $db->get(T_QUEUE, $pt->config->queue_count, "*");
 if (count($process_queue) <= $pt->config->queue_count && count($process_queue) > 0) {
     foreach ($process_queue as $key => $value) {
+        $video_paths = false;
         try {
             if ($value->processing == 0) {
                 $video = $db->where("id", $value->video_id)->getOne(T_VIDEOS);
+                $video_paths = $video ? PT_CronVideoPaths($video->video_location, __DIR__) : false;
+                if ($video_paths === false) {
+                    error_log('Skipped queued video with invalid local upload path; queue id ' . (int) $value->id);
+                    continue;
+                }
                 $video_id = $video->id;
                 $video_in_queue = $db
                     ->where("video_id", $video->id)
@@ -90,32 +138,25 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     litespeed_finish_request();
                 }
                 $video_res = $video_in_queue->video_res;
-                $ffmpeg_b = $pt->config->ffmpeg_binary_file;
-                $filepath = explode(".", $video->video_location)[0];
+                $ffmpeg_b = escapeshellarg($pt->config->ffmpeg_binary_file);
+                $ffmpeg_preset_arg = escapeshellarg($pt->config->convert_speed);
+                $filepath = $video_paths['relative_base'];
                 $time = time();
                 $full_dir = str_replace("ajax", "/", __DIR__);
 
-                $video_output_full_path_240 =
-                    $full_dir . "/" . $filepath . "_240p_converted.mp4";
-                $video_output_full_path_360 =
-                    $full_dir . "/" . $filepath . "_360p_converted.mp4";
-                $video_output_full_path_480 =
-                    $full_dir . "/" . $filepath . "_480p_converted.mp4";
-                $video_output_full_path_720 =
-                    $full_dir . "/" . $filepath . "_720p_converted.mp4";
-                $video_output_full_path_1080 =
-                    $full_dir . "/" . $filepath . "_1080p_converted.mp4";
-                $video_output_full_path_2048 =
-                    $full_dir . "/" . $filepath . "_2048p_converted.mp4";
-                $video_output_full_path_4096 =
-                    $full_dir . "/" . $filepath . "_4096p_converted.mp4";
+                $video_output_full_path_240 = escapeshellarg($video_paths['outputs'][240]);
+                $video_output_full_path_360 = escapeshellarg($video_paths['outputs'][360]);
+                $video_output_full_path_480 = escapeshellarg($video_paths['outputs'][480]);
+                $video_output_full_path_720 = escapeshellarg($video_paths['outputs'][720]);
+                $video_output_full_path_1080 = escapeshellarg($video_paths['outputs'][1080]);
+                $video_output_full_path_2048 = escapeshellarg($video_paths['outputs'][2048]);
+                $video_output_full_path_4096 = escapeshellarg($video_paths['outputs'][4096]);
 
-                $video_file_full_path =
-                    $full_dir . "/" . $video->video_location;
+                $video_file_full_path = escapeshellarg($video_paths['input']);
 
 
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 $video_output_full_path_240 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=426:-2 -crf 26 $video_output_full_path_240 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_240p_converted.mp4"
@@ -131,7 +172,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     $pt->config->p360 == "on"
                 ) {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=640:-2 -crf 26 $video_output_full_path_360 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=640:-2 -crf 26 $video_output_full_path_360 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_360p_converted.mp4"
@@ -149,7 +190,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     $pt->config->p480 == "on"
                 ) {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=854:-2 -crf 26 $video_output_full_path_480 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=854:-2 -crf 26 $video_output_full_path_480 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_480p_converted.mp4"
@@ -167,7 +208,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     $pt->config->p720 == "on"
                 ) {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1280:-2 -crf 26 $video_output_full_path_720 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=1280:-2 -crf 26 $video_output_full_path_720 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_720p_converted.mp4"
@@ -185,7 +226,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     $pt->config->p1080 == "on"
                 ) {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1920:-2 -crf 26 $video_output_full_path_1080 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=1920:-2 -crf 26 $video_output_full_path_1080 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_1080p_converted.mp4"
@@ -200,7 +241,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
 
                 if ($video_res >= 2048 && $pt->config->p2048 == "on") {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=2048:-2 -crf 26 $video_output_full_path_2048 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=2048:-2 -crf 26 $video_output_full_path_2048 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_2048p_converted.mp4"
@@ -215,7 +256,7 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
 
                 if ($video_res >= 3840 && $pt->config->p4096 == "on") {
                     $shell = shell_exec(
-                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 $video_output_full_path_4096 2>&1"
+                        "$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset $ffmpeg_preset_arg -filter:v scale=3840:-2 -crf 26 $video_output_full_path_4096 2>&1"
                     );
                     $upload_s3 = PT_UploadToS3(
                         $filepath . "_4096p_converted.mp4"
@@ -228,16 +269,16 @@ if (count($process_queue) <= $pt->config->queue_count && count($process_queue) >
                     ]);
                 }
 
-                if (file_exists($video->video_location)) {
-                    unlink($video->video_location);
+                if ($video_paths !== false && is_file($video_paths['input'])) {
+                    unlink($video_paths['input']);
                 }
                                 $db->where("video_id", $video->id)->delete(T_QUEUE);
                 pt_push_channel_notifiations($video_id);
             }
         } catch (Exception $e) {
             $db->where("video_id", $video->id)->delete(T_QUEUE);
-            if (file_exists($video->video_location)) {
-                unlink($video->video_location);
+            if ($video_paths !== false && is_file($video_paths['input'])) {
+                unlink($video_paths['input']);
             }
         }
     }

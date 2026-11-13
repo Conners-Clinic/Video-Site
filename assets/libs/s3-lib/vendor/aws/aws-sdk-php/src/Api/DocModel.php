@@ -97,11 +97,22 @@ class DocModel
         }
 
         if (isset($d['append'])) {
-            $result .= $d['append'];
+            if (!isset($d['excludeAppend'])
+                || !in_array($parentName, $d['excludeAppend'])
+            ) {
+                $result .= $d['append'];
+            }
+        }
+
+        if (isset($d['appendOnly'])
+           && in_array($parentName, $d['appendOnly']['shapes'])
+        ) {
+            $result .= $d['appendOnly']['message'];
         }
 
         return $this->clean($result);
     }
+
 
     private function clean($content)
     {
@@ -116,7 +127,7 @@ class DocModel
             'output-html' => true,
             'show-body-only' => true,
             'drop-empty-paras' => true,
-            'drop-font-tags' => true,
+            'clean' => true,
             'drop-proprietary-attributes' => true,
             'hide-comments' => true,
             'logical-emphasis' => true

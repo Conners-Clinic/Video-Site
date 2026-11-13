@@ -78,7 +78,7 @@ foreach ($related as $post) {
 	$slug       = PT_URLSlug($post->title,$post->id);
 	$category   = $category;
 	$related_list .= PT_LoadPage('articles/related-list', array(
-	    'TITLE' => $post->title,
+	    'TITLE' => PT_EncodeArticleTemplateBraces($post->title),
 	    'IMAGE' => PT_GetMedia($post->image),
 	    'VIEWS' => number_format($post->views),
 	    'CATEGORY_NAME' => !empty($categories[$category]) ? $categories[$category] : $categories['other'],
@@ -271,16 +271,16 @@ if (!empty($sidebarAd)) {
 // }
 $user =    PT_UserData($article->user_id);
 $pt->page        = 'read';
-$pt->title       = $article->title . ' | ' . $pt->config->title;
-$pt->description = $article->description;
+$pt->title       = PT_EncodeArticleTemplateBraces($article->title) . ' | ' . $pt->config->title;
+$pt->description = PT_EncodeArticleTemplateBraces($article->description);
 $pt->keyword     = @$pt->config->keyword;
 $pt->content     = PT_LoadPage('articles/read', array(
     'ID' => $article->id,
     'USER_DATA' => $user,
-    'TITLE' => $article->title,
-    'DESC' => $article->description,
+    'TITLE' => PT_EncodeArticleTemplateBraces($article->title),
+    'DESC' => PT_EncodeArticleTemplateBraces($article->description),
     'IMAGE' => PT_GetMedia($article->image),
-    'TEXT' => PT_Decode($article->text),
+    'TEXT' => PT_SanitizeArticleHtml(PT_Decode($article->text)),
     'TIME' => TranslateDate(date($pt->config->date_style,$article->time)),
     'VIEWS' => number_format($article->views),
     'SHARED' => number_format($article->shared),

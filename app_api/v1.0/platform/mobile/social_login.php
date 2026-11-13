@@ -1,5 +1,11 @@
 <?php
 use AppleSignIn\ASDecoder;
+// Incident containment: reject all provider assertions until verified login is restored.
+http_response_code(403);
+header('Content-Type: application/json');
+echo json_encode(array('api_status' => '403', 'errors' => array('error_text' => 'Social login is disabled')));
+exit();
+
 $response_data   = array(
     'api_status' => 400
 );

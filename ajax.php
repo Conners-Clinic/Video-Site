@@ -23,7 +23,7 @@ if (!empty($_GET['second'])) {
 	$second = PT_Secure($_GET['second'], 0);
 }
 
-if ($type  != 'ap' && !in_array($type,$api_requests) && $first != 'download_user_info') {
+if ($type != 'ap' && !($type === 'admin' && PT_AdminCsrfValid()) && !in_array($type,$api_requests) && $first != 'download_user_info') {
 	$hash_id = '';
 	$is_error = 0;
 

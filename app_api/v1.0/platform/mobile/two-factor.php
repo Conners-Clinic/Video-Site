@@ -1,77 +1,51 @@
 <?php
-// +------------------------------------------------------------------------+
-// | @author Deen Doughouz (DoughouzForest)
-// | @author_url 1: http://www.playtubescript.com
-// | @author_url 2: http://codecanyon.net/user/doughouzforest
-// | @author_email: wowondersocial@gmail.com   
-// +------------------------------------------------------------------------+
-// | PlayTube - The Ultimate Video Sharing Platform
-// | Copyright (c) 2017 PlayTube. All rights reserved.
-// +------------------------------------------------------------------------+
-
-
-if (empty($_POST['code'])) {
-    $response_data       = array(
-        'api_status'     => '400',
-        'api_version'    => $api_version,
-        'errors'         => array(
-            'error_id'   => '1',
-            'error_text' => 'code can not be empty'
-        )
-    );
-} 
-elseif (empty($_POST['user_id']) || !is_numeric($_POST['user_id'])) {
-    $response_data       = array(
-        'api_status'     => '400',
-        'api_version'    => $api_version,
-        'errors'         => array(
-            'error_id'   => '2',
-            'error_text' => 'user_id can not be empty'
-        )
-    );
+$response_data = array(
+    'api_status' => '400', 'api_version' => $api_version,
+    'errors' => array('error_id' => '3', 'error_text' => 'Wrong or expired code')
+);
+if (!isset($_POST['code'], $_POST['user_id']) || !is_string($_POST['code'])
+    || !preg_match('/\A[0-9]{6}\z/D', $_POST['code']) || !preg_match('/\A[0-9]+\z/D', (string) $_POST['user_id'])) {
+    return;
 }
-else{
-    $code = md5($_POST['code']);
-    $db->where("email_code", $code);
-    $db->where("id", PT_Secure($_POST['user_id']));
-    $login = $db->getOne(T_USERS);
-    if (!empty($login)) {
-
-        if (!empty($_POST['device_id'])) {
-            $db->where('id',$login->id)->update(T_USERS,array('device_id' => PT_Secure($_POST['device_id'])));
-        }
-        $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
-        $platforms           = array('phone','web');
-        foreach ($platforms as $platform_name) {
-            $insert_data     = array(
-                'user_id'    => $login->id,
-                'session_id' => $session_id,
-                'time'       => time(),
-                'platform'   => $platform_name
-            );
-
-            $insert = $db->insert(T_SESSIONS, $insert_data);
-        }
-
-        $response_data       = array(
-            'api_status'     => '200',
-            'api_version'    => $api_version,
-            'data'           => array(
-                'session_id' => $session_id,
-                'message'    => 'Successfully logged in, Please wait.',
-                'user_id'    => $login->id,
-                'cookie'     => $session_id
-            ) 
-        );
+$login = $db->where('id', (int) $_POST['user_id'])->getOne(T_USERS);
+$challenge = !empty($login) && is_string($login->email_code) ? $login->email_code : '';
+$parts = array();
+if (empty($login) || (int) $login->active !== 1 || (int) $login->two_factor !== 1
+    || $login->two_factor_method !== 'two_factor' || $pt->config->two_factor_setting !== 'on'
+    || !preg_match('/\A2fa:([a-f0-9]{32}):([0-9]{10}):([0-9])\z/D', $challenge, $parts)) {
+    return;
+}
+$age = time() - (int) $parts[2];
+$attempts = (int) $parts[3];
+$valid = $age >= 0 && $age <= 300 && $attempts < 5
+    && hash_equals($parts[1], md5($_POST['code']));
+$next = !$valid && $age >= 0 && $age <= 300 && $attempts < 4
+    ? '2fa:' . $parts[1] . ':' . $parts[2] . ':' . ($attempts + 1) : '';
+// Compare-and-swap prevents code replay and concurrent attempt-counter bypass.
+$consumed = $db->where('id', $login->id)->where('email_code', $challenge)
+    ->update(T_USERS, array('email_code' => $next));
+if (!$valid || !$consumed || $db->count < 1) {
+    return;
+}
+if (!empty($_POST['device_id'])) {
+    $db->where('id', $login->id)->update(T_USERS, array('device_id' => PT_Secure($_POST['device_id'])));
+}
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_regenerate_id(true);
+}
+if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+$session_id = bin2hex(random_bytes(32));
+foreach (array('phone', 'web') as $platform_name) {
+    $insert = $db->insert(T_SESSIONS, array(
+        'user_id' => $login->id, 'session_id' => $session_id,
+        'time' => time(), 'platform' => $platform_name
+    ));
+    if (!$insert) {
+        return;
     }
-    else{
-        $response_data           = array(
-            'api_status'         => '400',
-            'api_version'        => $api_version,
-            'errors'             => array(
-                'error_id'       => '3',
-                'error_text'     => 'Wrong code'
-            ) 
-        );
-    }
-} 
+}
+$response_data = array(
+    'api_status' => '200', 'api_version' => $api_version,
+    'data' => array('session_id' => $session_id, 'cookie' => $session_id,
+        'message' => 'Successfully logged in, Please wait.', 'user_id' => $login->id)
+);

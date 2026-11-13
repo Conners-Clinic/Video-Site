@@ -8,37 +8,10 @@
 // | PlayTube - The Ultimate Video Sharing Platform
 // | Copyright (c) 2017 PlayTube. All rights reserved.
 // +------------------------------------------------------------------------+
-$public = $db->getOne(T_USERS);
-$public = PT_UserData($public->id);
-$user_public_data = array();
-foreach ($public as $key => $value) {
-	if ($key != 'password' && $key != 'email_code') {
-		$user_public_data[] = $key;
-	}
-	
-}
-
-
-// $user_public_data = array(
-// 	'id',
-// 	'username',
-// 	'email',
-// 	'first_name',
-// 	'last_name',
-// 	'gender',
-// 	'language',
-// 	'avatar',
-// 	'cover',
-// 	'about',
-// 	'google',
-// 	'facebook',
-// 	'twitter',
-// 	'verified',
-// 	'is_pro',
-// 	'url',
-// 	'video_mon',
-// 	'monetization',
-// );
+// Explicit public profile fields: never infer disclosure from database columns.
+$user_public_data = array(
+    'id', 'username', 'first_name', 'last_name', 'name', 'gender', 'language', 'avatar', 'cover', 'about', 'google', 'facebook', 'twitter', 'instagram', 'website', 'verified', 'is_pro', 'url', 'subscribe_count', 'subscriber_price', 'video_mon', 'monetization', 'category', 'last_active', 'registered'
+);
 
 # Site public config 
 $site_public_data = array(

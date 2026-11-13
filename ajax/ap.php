@@ -20,6 +20,19 @@ if (PT_IsAdmin() == false && !in_array($pt->user->admin, array(1,2,3))) {
     exit();
 }
 
+// Every administrative action, including legacy GET actions, requires a session token.
+PT_RequireAdminCsrf();
+require_once dirname(__DIR__) . '/assets/includes/admin_security.php';
+PT_RequireAdminAction($first);
+
+// Delegated content roles may not change system settings or account privileges.
+$security_admin_actions = array('permission', 'update_moderator_permission', 'save-settings', 'save-design', 'save-custom-design-settings', 'reset_apps_key', 'backup', 'test_backblaze', 'testS3', 'test_ftp', 'test_wasabi', 'test_spaces', 'uploadFiles');
+if (!PT_IsAdmin() && in_array($first, $security_admin_actions, true)) {
+    http_response_code(403);
+    echo json_encode(array('status' => 403, 'message' => 'Administrator privileges required'));
+    exit();
+}
+
 if ($first == 'change_cats') {
 
 $ids = $_POST['ids'] ?? [];
@@ -285,6 +298,21 @@ if ($first == 'update_moderator_permission') {
 
 
 if ($first == 'save-settings') {
+    // Incident containment: executable paths are managed on the server only.
+    if (array_key_exists('ffmpeg_binary_file', $_POST)) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(array('status' => 403, 'message' => 'Executable path changes are disabled'));
+        exit();
+    }
+    if (array_key_exists('convert_speed', $_POST) &&
+        (!is_string($_POST['convert_speed']) || !in_array($_POST['convert_speed'], array('ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'), true))) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(array('status' => 400, 'message' => 'Invalid conversion preset'));
+        exit();
+    }
+
     $submit_data = array();
     foreach ($_POST as $key => $settings_to_save) {
         //if ($key != 'ffmpeg_binary_file') {
@@ -1317,7 +1345,7 @@ if ($first == 'new-article') {
                 'description' => PT_Secure(PT_ShortText($_POST['description'],200)),
                 'category' => PT_Secure($_POST['category']),
                 'image' => $post_image,
-                'text' => htmlspecialchars($_POST['text']),
+                'text' => htmlspecialchars(PT_SanitizeArticleHtml($_POST['text']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 'tags' => PT_Secure(PT_ShortText($_POST['tags']),250),
                 'time' => time(),
                 'user_id' => $pt->user->id,
@@ -1400,7 +1428,7 @@ if ($first == 'update-article') {
             'title' => PT_Secure(PT_ShortText($_POST['title'],150)),
             'description' => PT_Secure(PT_ShortText($_POST['description'],200)),
             'category' => PT_Secure($_POST['category']),
-            'text' => htmlspecialchars($_POST['text']),
+            'text' => htmlspecialchars(PT_SanitizeArticleHtml($_POST['text']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'tags' => PT_Secure(PT_ShortText($_POST['tags']),250),
             'time' => time(),
             'active' => $active,
@@ -4259,41 +4287,10 @@ if ($first == 'rm-user-invitation') {
     exit();
 }
 if ($first == 'ffmpeg_debug') {
-    $data['status'] = 400;
-    if (!empty($_FILES['video']['tmp_name'])) {
-        $file_info    = array(
-            'file'    => $_FILES['video']['tmp_name'],
-            'size'    => $_FILES['video']['size'],
-            'name'    => $_FILES['video']['name'],
-            'type'    => $_FILES['video']['type'],
-            'allowed' => 'mp4,mov,webm,mpeg,3gp,avi,flv,ogg,mkv,mk3d,mks,wmv'
-        );
-
-        $pt->remoteStorage = false;
-        $file_upload   = PT_ShareFile($file_info);
-        if (!empty($file_upload['filename'])) {
-            $ffmpeg_b                   = $pt->config->ffmpeg_binary_file;
-            $video_output_full_path_240 = dirname(__DIR__) . "/upload/videos/test_240p_converted.mp4";
-            @unlink($video_output_full_path_240);
-            // $video_file_full_path = dirname(__DIR__) . "/admin-panel/videos/test.mp4";
-            $video_file_full_path = $file_upload['filename'];
-            $shell                = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset " . $pt->config->convert_speed . " -filter:v scale=426:-2 -crf 26 $video_output_full_path_240 2>&1");
-            if (file_exists($video_output_full_path_240)) {
-                $data['video_url'] = $pt->config->site_url . '/upload/videos/test_240p_converted.mp4';
-            }
-            $data['status'] = 200;
-            $data['data']   = $shell;
-        }
-        else{
-            $data['message'] = 'something went wrong when trying to upload video please try with another video';
-        }
-    }
-    else{
-        $data['message'] = 'please upload a video';
-    }
-
-    header("Content-type: application/json");
-    echo json_encode($data);
+    // Incident containment: this diagnostic endpoint allowed command injection.
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(array('status' => 403, 'message' => 'FFmpeg diagnostics are disabled'));
     exit();
 }
 

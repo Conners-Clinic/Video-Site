@@ -108,9 +108,16 @@ if ($first == 'search') {
 }
 
 if ($first == 'delete_chat') {
+    $chat_ids = PT_SecurityIdList(array($_POST['id'] ?? ''));
+    if ($chat_ids === false || empty($chat_ids[0])) {
+        http_response_code(400);
+        $data = array('status' => 400, 'message' => 'Invalid recipient');
+        return;
+    }
+
 	if (!empty($_POST['id'])) {
-		$id = PT_Secure($_POST['id']);
-		$messages = $db->where("(from_id = {$pt->user->id} AND to_id = {$id}) OR (from_id = {$id} AND to_id = {$pt->user->id})")->get(T_MESSAGES);
+		$id = $chat_ids[0];
+		$messages = $db->where('(from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)', array((int) $pt->user->id, $id, $id, (int) $pt->user->id))->get(T_MESSAGES);
 		$update1 = array();
 		$update2 = array();
 		$erase = array();
@@ -140,7 +147,7 @@ if ($first == 'delete_chat') {
 			$final_query = "UPDATE " . T_MESSAGES . " set `to_deleted` = '1' WHERE `id` IN({$update2}) ";
 			$db->rawQuery($final_query);
 		}
-		$delete_chats = $db->rawQuery("DELETE FROM " . T_CHATS . " WHERE user_one = {$pt->user->id} AND user_two = $id");
+		$delete_chats = $db->rawQuery("DELETE FROM " . T_CHATS . " WHERE user_one = ? AND user_two = ?", array((int) $pt->user->id, $id));
 	}
 }
 if ($first == "load_user_chat") {

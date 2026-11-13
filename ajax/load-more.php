@@ -1,4 +1,17 @@
 <?php
+// Normalize numeric lists before they can enter legacy SQL expressions.
+foreach (array('channels_ids', 'video_studio_ids', 'ids') as $security_list_key) {
+    if (isset($_POST[$security_list_key])) {
+        $security_ids = PT_SecurityIdList($_POST[$security_list_key]);
+        if ($security_ids === false) { PT_SecurityBadInput(); }
+        $_POST[$security_list_key] = $security_ids;
+    }
+}
+if (isset($_POST['category']) && $_POST['category'] !== '') {
+    $security_ids = PT_SecurityIdList($_POST['category'], true);
+    if ($security_ids === false) { PT_SecurityBadInput(); }
+    $_POST['category'] = implode(',', $security_ids);
+}
 if (empty($_GET['first']) || empty($_POST['last_id'])) {
  	$data = array('status' => 404);
 } 

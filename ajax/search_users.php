@@ -2,8 +2,8 @@
 
 if (!empty($_POST['search_value'])) {
 	$filter_keyword = PT_Secure($_POST['search_value']);
-	$sql = "SELECT * FROM ".T_USERS." WHERE username LIKE '%$filter_keyword%' OR email LIKE '%$filter_keyword%' OR first_name LIKE '%$filter_keyword%' OR last_name LIKE '%$filter_keyword%' LIMIT 10";
-	$users = $db->rawQuery($sql);
+	$sql = "SELECT * FROM ".T_USERS." WHERE username LIKE ? OR email LIKE ? OR first_name LIKE ? OR last_name LIKE ? LIMIT 10";
+	$users = $db->rawQuery($sql, array("%" . $filter_keyword . "%", "%" . $filter_keyword . "%", "%" . $filter_keyword . "%", "%" . $filter_keyword . "%"));
 	if (!empty($users)) {
 		$html = '';
 		foreach ($users as $key => $user) {

@@ -136,7 +136,7 @@ if ($first == 'create') {
 if ($first == 'search'){
 	if (!empty($_POST['search_value'])) {
 		$search_value = PT_Secure($_POST['search_value']);
-		$search_result = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE (title LIKE '%$search_value%' OR tags LIKE '%$search_value%' OR description LIKE '%$search_value%') AND privacy = 0 AND user_id = ".$pt->user->id." LIMIT 10");
+		$search_result = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE (title LIKE ? OR tags LIKE ? OR description LIKE ?) AND privacy = 0 AND user_id = ? LIMIT 10", array("%" . $search_value . "%", "%" . $search_value . "%", "%" . $search_value . "%", (int) $pt->user->id));
 		if (!empty($search_result)) {
 			$html = '';
 			foreach ($search_result as $key => $search) {

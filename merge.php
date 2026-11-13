@@ -4,7 +4,7 @@ require_once('./assets/init.php');
 
 header('Content-Type: application/json; charset=utf-8');
 
-if (!defined('IS_LOGGED') || !IS_LOGGED || empty($pt->user->admin)) {
+if (!defined('IS_LOGGED') || !IS_LOGGED || !PT_IsAdmin()) {
     http_response_code(400);
     echo json_encode([
         'success' => false,
@@ -65,6 +65,8 @@ function fail(string $message, array $result = []): void
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     response(400, false, 'POST request required.');
 }
+
+PT_RequireAdminCsrf();
 
 $action = $_POST['action'] ?? '';
 

@@ -17,7 +17,25 @@ if (PT_IsAdmin() == false) {
     exit();
 }
 
+// Every administrative action, including legacy GET actions, requires a session token.
+PT_RequireAdminCsrf();
+
 if ($first == 'save-settings') {
+    // Incident containment: executable paths are managed on the server only.
+    if (array_key_exists('ffmpeg_binary_file', $_POST)) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(array('status' => 403, 'message' => 'Executable path changes are disabled'));
+        exit();
+    }
+    if (array_key_exists('convert_speed', $_POST) &&
+        (!is_string($_POST['convert_speed']) || !in_array($_POST['convert_speed'], array('ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'), true))) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(array('status' => 400, 'message' => 'Invalid conversion preset'));
+        exit();
+    }
+
     $submit_data = array();
     foreach ($_POST as $key => $settings_to_save) {
         $submit_data[$key] = $settings_to_save;
@@ -679,7 +697,7 @@ if ($first == 'new-article') {
                 'description' => PT_Secure(PT_ShortText($_POST['description'],200)),
                 'category' => PT_Secure($_POST['category']),
                 'image' => $post_image,
-                'text' => htmlspecialchars($_POST['text']),
+                'text' => htmlspecialchars(PT_SanitizeArticleHtml($_POST['text']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 'tags' => PT_Secure(PT_ShortText($_POST['tags']),250),
                 'time' => time(),
                 'user_id' => $pt->user->id,
@@ -761,7 +779,7 @@ if ($first == 'update-article') {
             'title' => PT_Secure(PT_ShortText($_POST['title'],150)),
             'description' => PT_Secure(PT_ShortText($_POST['description'],200)),
             'category' => PT_Secure($_POST['category']),
-            'text' => htmlspecialchars($_POST['text']),
+            'text' => htmlspecialchars(PT_SanitizeArticleHtml($_POST['text']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'tags' => PT_Secure(PT_ShortText($_POST['tags']),250),
             'time' => time(),
             'user_id' => $pt->user->id,

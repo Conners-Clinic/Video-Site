@@ -18,7 +18,8 @@ if ($application == 'phone') {
 
 	$appmod = "app_api/v$api_version/platform/mobile/$type.php";
 
-	if (file_exists($appmod)) {
+	if (is_string($type) && preg_match('/\A[a-zA-Z0-9_-]{1,64}\z/D', $type) &&
+        is_file($appmod) && dirname(realpath($appmod)) === realpath("app_api/v$api_version/platform/mobile")) {
 		require_once $appmod;
 	}
 

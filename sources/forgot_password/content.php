@@ -1,4 +1,5 @@
 <?php
+PT_RequireSameOriginPost($pt->config->site_url);
 if (IS_LOGGED == true) {
 	header("Location: " . PT_Link(''));
 	exit();
@@ -20,7 +21,7 @@ if (!empty($_POST)) {
         $user_id = $db->getValue(T_USERS, "id");
         if (!empty($user_id)) {
            $rest_user = PT_UserData($user_id);
-           $email_code = sha1(rand(1111,9999) . rand(1111,9999) . uniqid(rand(1111,9999)));
+           $email_code = 'rst:' . bin2hex(random_bytes(16)) . ':' . time();
            $update_data = array('email_code' => $email_code);
            $db->where('id', $rest_user->id);
            $update = $db->update(T_USERS, $update_data);

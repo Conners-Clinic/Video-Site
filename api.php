@@ -12,6 +12,18 @@
 
 header_remove('Server');
 header("Content-type: application/json");
+// Incident containment: social login has an unverified identity assertion path.
+if (isset($_GET['type']) && $_GET['type'] === 'social_login') {
+    http_response_code(403);
+    echo json_encode(array('api_status' => '403', 'errors' => array('error_text' => 'Social login is disabled')));
+    exit();
+}
+// API method names are identifiers, never filesystem paths.
+if (isset($_GET['type']) && (!is_string($_GET['type']) || !preg_match('/\A[a-zA-Z0-9_-]{1,64}\z/D', $_GET['type']))) {
+    http_response_code(400);
+    echo json_encode(array('api_status' => '400', 'errors' => array('error_text' => 'Invalid API method')));
+    exit();
+}
 require('assets/init.php');
 
 $api_versions      = array('1.0');

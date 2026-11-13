@@ -82,3 +82,11 @@ desktop.ini
 # Git temporary files
 *.orig
 *.rej
+# Server-local credentials and incident artifacts
+/nodejs/config.json
+/web/index.php
+/web/test.php
+*.bk
+/cache/
+/tmp/
+/Script/

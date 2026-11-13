@@ -123,30 +123,47 @@ if (isset($provider) && in_array($provider, $types)) {
                     exit("Your E-mail is not verfied on Discord.");
                 }
             }
+            // Never bind an existing password account using only a provider email assertion.
+            $provider_email_verified = $user_profile->emailVerified ?? null;
+            $verified_email = !empty($user_profile->email) && filter_var($user_email, FILTER_VALIDATE_EMAIL)
+                && ($provider_email_verified === true || (is_string($provider_email_verified)
+                    && strcasecmp($provider_email_verified, $user_email) === 0));
+            if (!$verified_email || !is_scalar($user_profile->identifier) || (string) $user_profile->identifier === '') {
+                http_response_code(403);
+                exit('Use your account password to sign in. A verified provider email is required.');
+            }
             if (PT_UserEmailExists($user_email) === true) {
             	$db->where('email', $user_email);
             	$login = $db->getOne(T_USERS);
-                $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                if ($provider !== 'Google' || empty($login) || $login->src !== 'Google'
+                    || !hash_equals((string) $login->google, (string) $user_profile->identifier)
+                    || (int) $login->active !== 1 || (int) $login->two_factor === 1) {
+                    http_response_code(403);
+                    exit('Use your account password to sign in; provider linking requires a verified account session.');
+                }
+                if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                $session_id          = bin2hex(random_bytes(32));
                 $insert_data         = array(
                     'user_id' => $login->id,
                     'session_id' => $session_id,
                     'time' => time()
                 );
                 $insert              = $db->insert(T_SESSIONS, $insert_data);
-                $_SESSION['user_id'] = $session_id;
-                setcookie("user_id", $session_id, time() + (10 * 365 * 24 * 60 * 60), "/");
+                if (!$insert) { http_response_code(503); return; }
+            $_SESSION['user_id'] = $session_id;
+                setcookie("user_id", $session_id, array('expires' => time() + (30 * 24 * 60 * 60), 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
                 header("Location: $site_url");
                 exit();
             } else {
-                $str          = md5(microtime());
+                $str          = bin2hex(random_bytes(16));
                 $id           = substr($str, 0, 9);
-                $password     = substr(md5(time()), 0, 9);
+                $password     = bin2hex(random_bytes(32));
                 $user_uniq_id = (empty($db->where('username', $id)->getValue(T_USERS, 'id'))) ? $id : 'u_' . $id;
                 $social_url   = substr($user_profile->profileURL, strrpos($user_profile->profileURL, '/') + 1);
                 $re_data      = array(
                     'username' => PT_Secure($user_uniq_id, 0),
                     'email' => PT_Secure($user_email, 0),
-                    'password' => PT_Secure(sha1($password), 0),
+                    'password' => password_hash($password, PASSWORD_DEFAULT),
                     'email_code' => PT_Secure(sha1($user_uniq_id), 0),
                     'first_name' => PT_Secure($name),
                     'last_name' => PT_Secure($user_profile->lastName),
@@ -162,7 +179,7 @@ if (isset($provider) && in_array($provider, $types)) {
                 }
                 if ($provider == 'Google') {
                     $re_data['about']  = PT_Secure($user_profile->description);
-                    $re_data['google'] = PT_Secure($social_url);
+                    $re_data['google'] = PT_Secure((string) $user_profile->identifier);
                 }
                 if ($provider == 'Facebook') {
                     $fa_social_url       = @explode('/', $user_profile->profileURL);
@@ -237,15 +254,18 @@ if (isset($provider) && in_array($provider, $types)) {
                         }
                     }
 
-                    $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                    if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+
+                    $session_id          = bin2hex(random_bytes(32));
 	                $insert_data         = array(
 	                    'user_id' => $insert_id,
 	                    'session_id' => $session_id,
 	                    'time' => time()
 	                );
 	                $insert              = $db->insert(T_SESSIONS, $insert_data);
-	                $_SESSION['user_id'] = $session_id;
-	                setcookie("user_id", $session_id, time() + (10 * 365 * 24 * 60 * 60), "/");
+	                if (!$insert) { http_response_code(503); return; }
+            $_SESSION['user_id'] = $session_id;
+	                setcookie("user_id", $session_id, array('expires' => time() + (30 * 24 * 60 * 60), 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
 	                header("Location: $site_url");
 	                exit();
                 }
