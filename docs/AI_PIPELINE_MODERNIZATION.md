@@ -1,6 +1,6 @@
 # AI pipeline modernization (models, complete-transcript summaries, reliability)
 
-Status: implemented locally, **not deployed, nothing activated**. Transcription (`transcript_system`) and all crons stay as they were (off).
+Status: committed and pushed to `origin/main` (commit `9a79139`); the test-site deploy failed with an SSH timeout, so it may not have reached the test site. Nothing activated; `super` (live) untouched. See `docs/ONE_VIDEO_SUMMARY_TEST.md` for the first-test plan; `tests/mysql_integration.php` covers real MySQL 5.7. Transcription (`transcript_system`) and all crons stay as they were (off).
 
 ## 1. Models (one place: `content-pipeline/config/pipeline-models.json`)
 
@@ -58,7 +58,7 @@ Reasoning tokens (billed as output) are the main uncertainty; stages use `none`/
 
 ## 6. Tests
 
-`php tests/run.php` (PHP CLI only; no network, DB or API key; `python3` for the scorer self-test). Covers: config and model resolution, request shapes for Luna/Terra/legacy models, rejected-parameter fallback, malformed/empty/truncated/refused/5xx/401/quota responses, cost math, budgets, chunking (short, one-hour, 260k-word, unpunctuated), summaries (short, one-hour, end-of-video facts, exceptionally long, hierarchical merge, failing section), Pass 0 (chunking, truncation, changed dose, dropped content, medical terms, raw preserved), duplicate/locked/stale/failed jobs and resume, a full mocked pipeline run, description safety, regenerate guards. The mocks simulate model behaviour, so these prove our handling, not model quality. **Unverified:** real Luna/Terra responses (parameter acceptance, reasoning-token usage, output quality), the real MySQL queries (the suite uses an in-memory fake DB; migration 2032 has not been run), the admin UI buttons in a browser, and live performance.
+`php tests/run.php` (PHP CLI only; no network, DB or API key; `python3` for the scorer self-test). Covers: config and model resolution, request shapes for Luna/Terra/legacy models, rejected-parameter fallback, malformed/empty/truncated/refused/5xx/401/quota responses, cost math, budgets, chunking (short, one-hour, 260k-word, unpunctuated), summaries (short, one-hour, end-of-video facts, exceptionally long, hierarchical merge, failing section), Pass 0 (chunking, truncation, changed dose, dropped content, medical terms, raw preserved), duplicate/locked/stale/failed jobs and resume, a full mocked pipeline run, description safety, regenerate guards. The mocks simulate model behaviour, so these prove our handling, not model quality. **Unverified:** real Luna/Terra responses (parameter acceptance, reasoning-token usage, output quality), the real MySQL queries (the suite uses an in-memory fake DB; migration 2032 was applied and exercised only on a disposable local MySQL 5.7.44 via `tests/mysql_integration.php`, not on any shared database), the admin UI buttons in a browser, and live performance.
 
 ## 7. Safely testing ONE video before re-enabling anything
 
