@@ -219,8 +219,13 @@ function PT_ParseKeyTakeaways($stored) {
         if ($item === '') {
             continue;
         }
-        if (mb_strlen($item, 'UTF-8') > 160) {
-            $item = mb_substr($item, 0, 157, 'UTF-8') . '...';
+        if (mb_strlen($item, 'UTF-8') > 240) {
+            $cut = mb_substr($item, 0, 237, 'UTF-8');
+            $sp = mb_strrpos($cut, ' ', 0, 'UTF-8');
+            if ($sp !== false && $sp > 120) {
+                $cut = mb_substr($cut, 0, $sp, 'UTF-8');
+            }
+            $item = rtrim($cut, " ,;:-") . '...';
         }
         $items[] = $item;
         if (count($items) >= 5) {
