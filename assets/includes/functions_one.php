@@ -454,6 +454,21 @@ function addhttp($url) {
     }
     return $url;
 }
+function PT_R2ClientOptions($config) {
+    // Keep the existing storage settings and object keys; only the S3 provider changes.
+    return array(
+        'version' => 'latest',
+        'region' => 'auto',
+        'endpoint' => 'https://1c83d95d15f43236b11ef2982ea6dcd0.r2.cloudflarestorage.com',
+        'use_path_style_endpoint' => true,
+        'request_checksum_calculation' => 'when_required',
+        'response_checksum_validation' => 'when_required',
+        'credentials' => array(
+            'key' => $config->spaces_key,
+            'secret' => $config->spaces_secret
+        )
+    );
+}
 function PT_GetMedia($media = '', $is_upload = false){
     global $pt;
     if (empty($media)) {
@@ -473,13 +488,13 @@ function PT_GetMedia($media = '', $is_upload = false){
         return addhttp($pt->config->ftp_endpoint) . '/' . $media;
     }
     else if ($pt->config->spaces == 'on') {
-        if (empty($pt->config->spaces_key) || empty($pt->config->spaces_secret) || empty($pt->config->space_region) || empty($pt->config->space_name)) {
+        if (empty($pt->config->spaces_key) || empty($pt->config->spaces_secret) || empty($pt->config->space_name)) {
             return $pt->config->site_url . '/' . $media;
         }
         if (!empty($pt->config->spaces_endpoint) && filter_var($pt->config->spaces_endpoint, FILTER_VALIDATE_URL)) {
-            return $pt->config->spaces_endpoint . "/" . $media;
+            return rtrim($pt->config->spaces_endpoint, "/") . "/" . ltrim($media, "/");
         }
-        return  'https://' . $pt->config->space_name . '.' . $pt->config->space_region . '.digitaloceanspaces.com/' . $media;
+        return 'https://cdn.connersclinic.com/' . ltrim($media, '/');
     }
     else if ($pt->config->cloud_upload == 'on') {
         if (!empty($pt->config->cloud_endpoint) && filter_var($pt->config->cloud_endpoint, FILTER_VALIDATE_URL)) {
@@ -1241,29 +1256,19 @@ function PT_UploadToS3($filename, $config = array()) {
             $ftp->close();
         }
     }
-    elseif ($pt->config->spaces == 'on' && !empty($pt->config->spaces_key) && !empty($pt->config->spaces_secret) && !empty($pt->config->space_name) && !empty($pt->config->space_region)) {
+    elseif ($pt->config->spaces == 'on' && !empty($pt->config->spaces_key) && !empty($pt->config->spaces_secret) && !empty($pt->config->space_name)) {
 
         include_once('assets/libs/s3-lib/vendor/autoload.php');
         $key = $pt->config->spaces_key;
         $secret = $pt->config->spaces_secret;
         $space_name = $pt->config->space_name;
-        $region = $pt->config->space_region;
 
-        $s3 = new S3Client(array(
-                'version' => 'latest',
-                'endpoint' => 'https://' . $region . '.digitaloceanspaces.com',
-                'region' => $region,
-                'credentials' => array(
-                    'key' => $pt->config->spaces_key,
-                    'secret' => $pt->config->spaces_secret
-                )
-            ));
+        $s3 = new S3Client(PT_R2ClientOptions($pt->config));
         $s3->putObject(array(
             'Bucket' => $pt->config->space_name,
             'Key' => $filename,
             'Body' => fopen($filename, 'r+'),
-            'ACL' => 'public-read',
-            'CacheControl' => 'max-age=3153600'
+            'CacheControl' => 'public, max-age=31536000, immutable'
         ));
         if (empty($config['delete'])) {
             if ($s3->doesObjectExist($pt->config->space_name, $filename)) {
@@ -1468,22 +1473,13 @@ function PT_DeleteFromToS3($filename, $config = array()) {
             }
         }
     }
-    elseif ($pt->config->spaces == 'on' && !empty($pt->config->spaces_key) && !empty($pt->config->spaces_secret) && !empty($pt->config->space_name) && !empty($pt->config->space_region)) {
+    elseif ($pt->config->spaces == 'on' && !empty($pt->config->spaces_key) && !empty($pt->config->spaces_secret) && !empty($pt->config->space_name)) {
         include_once('assets/libs/s3-lib/vendor/autoload.php');
         $key = $pt->config->spaces_key;
         $secret = $pt->config->spaces_secret;
         $space_name = $pt->config->space_name;
-        $region = $pt->config->space_region;
 
-        $s3 = new S3Client(array(
-                'version' => 'latest',
-                'endpoint' => 'https://' . $region . '.digitaloceanspaces.com',
-                'region' => $region,
-                'credentials' => array(
-                    'key' => $pt->config->spaces_key,
-                    'secret' => $pt->config->spaces_secret
-                )
-            ));
+        $s3 = new S3Client(PT_R2ClientOptions($pt->config));
         $s3->deleteObject(array(
             'Bucket' => $pt->config->space_name,
             'Key' => $filename

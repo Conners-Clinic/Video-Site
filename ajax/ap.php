@@ -1713,47 +1713,23 @@ if ($first == 'test_wasabi') {
     exit();
 }
 if ($first == 'test_spaces') {
-    include_once('assets/libs/s3-lib/vendor/autoload.php');
-    try {
-        $s3Client = S3Client::factory(array(
-            'version' => 'latest',
-            'region' => $pt->config->space_region,
-            'endpoint' => 'https://' . $pt->config->space_region . '.digitaloceanspaces.com',
-            'credentials' => array(
-                'key' => $pt->config->spaces_key,
-                'secret' => $pt->config->spaces_secret
-            )
-        ));
-
-        $buckets  = $s3Client->listBuckets();
-        if (!empty($buckets)) {
-            if ($s3Client->doesBucketExist($pt->config->space_name)) {
-                $data['status'] = 200;
-                $array          = array(
-                    'upload/photos/d-cover.jpg',
-                    'upload/photos/d-avatar.jpg',
-                    'upload/photos/f-avatar.png',
-                    'upload/photos/thumbnail.jpg',
-                );
-                foreach ($array as $key => $value) {
-                    $upload = PT_UploadToS3($value, array(
-                        'delete' => 'no'
-                    ));
-                }
-            }
-
-            else {
-                $data['status'] = 300;
-            }
+    if (empty($pt->config->spaces_key) || empty($pt->config->spaces_secret) || empty($pt->config->space_name)) {
+        $data['status'] = 400;
+        $data['message'] = 'Enter the R2 bucket name, access key ID and secret access key.';
+    } else {
+        include_once('assets/libs/s3-lib/vendor/autoload.php');
+        try {
+            $s3Client = new S3Client(PT_R2ClientOptions($pt->config));
+            // A bucket-scoped read checks access without listing accounts or uploading files.
+            $s3Client->listObjectsV2(array(
+                'Bucket' => $pt->config->space_name,
+                'MaxKeys' => 1
+            ));
+            $data['status'] = 200;
+        } catch (Exception $e) {
+            $data['status'] = 400;
+            $data['message'] = 'Unable to connect to R2. Check the bucket name, credentials and bucket permissions.';
         }
-        else {
-            $data['status'] = 500;
-        }
-    }
-
-    catch (Exception $e) {
-        $data['status']  = 400;
-        $data['message'] = $e->getMessage();
     }
     header("Content-type: application/json");
     echo json_encode($data);

@@ -91,12 +91,12 @@
             </div>
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-title">Digitalocean Spaces Configuration</h6>
+                    <h6 class="card-title">Cloudflare R2 Configuration</h6>
                     <div class="spaces-settings-alert"></div>
                     <form class="spaces-settings" method="POST">
                         <div class="float-left">
-                            <label for="spaces" class="main-label">Digitalocean Spaces Storage</label>
-                            <br><small class="admin-info">Enable Digitalocean Storage to store your files in Digitalocean Spaces.</small>
+                            <label for="spaces" class="main-label">Cloudflare R2 Storage</label>
+                            <br><small class="admin-info">Enable Cloudflare R2 to store your files in your R2 bucket.</small>
                         </div>
                         <div class="form-group float-right switcher">
                             <input type="hidden" name="spaces" value="off" />
@@ -107,48 +107,41 @@
                         <hr>
                         <div class="form-group form-float">
                             <div class="form-line">
-                                <label class="form-label">Digitalocean Space Name</label>
+                                <label class="form-label">Cloudflare R2 Bucket Name</label>
                                 <input type="text" name="space_name" class="form-control" value="<?php echo ($pt->config->space_name);?>">
-                                <small class="admin-info">Your Digitalocean Space Bucket name.</small>
+                                <small class="admin-info">Your Cloudflare R2 bucket name, e.g: videos.</small>
                             </div>
                         </div>
                         <hr>
                         <div class="form-group form-float">
                             <div class="form-line">
-                                <label class="form-label">Digitalocean Key</label>
+                                <label class="form-label">Cloudflare R2 Access Key ID</label>
                                 <input type="text" name="spaces_key" class="form-control" value="<?php echo ($pt->config->spaces_key);?>">
-                                <small class="admin-info">Your Digitalocean Space credentials key.</small>
+                                <small class="admin-info">Your Cloudflare R2 S3 Access Key ID.</small>
                             </div>
                         </div>
                         <hr>
                         <div class="form-group form-float">
                             <div class="form-line">
-                                <label class="form-label">Digitalocean Secret</label>
+                                <label class="form-label">Cloudflare R2 Secret Access Key</label>
                                 <input type="text" name="spaces_secret" class="form-control" value="<?php echo ($pt->config->spaces_secret);?>">
-                                <small class="admin-info">Your Digitalocean Space credentials secret key.</small>
+                                <small class="admin-info">Your Cloudflare R2 S3 Secret Access Key.</small>
                             </div>
                         </div>
                         <hr>
-                        <label for="space_region">Digitalocean bucket region</label>
-                        <br><small class="admin-info">Your Digitalocean's S3 Region</small>
+                        <label for="space_region">Cloudflare R2 S3 Region</label>
+                        <br><small class="admin-info">Use auto for R2. Authenticated S3 API endpoint: https://1c83d95d15f43236b11ef2982ea6dcd0.r2.cloudflarestorage.com. Configure the bucket name separately.</small>
                         <div class="form-group">
                             <select class="form-control show-tick" id="space_region" name="space_region">
-                              <option value="nyc3" <?php echo ($pt->config->space_region == 'nyc3')   ? ' selected' : '';?> >New York</option>
-                              <option value="ams3" <?php echo ($pt->config->space_region == 'ams3')   ? ' selected' : '';?> >Amsterdam</option>
-                              <option value="sgp1" <?php echo ($pt->config->space_region == 'sgp1')   ? ' selected' : '';?> >Singapore</option>
-                              <option value="SFO2" <?php echo ($pt->config->space_region == 'SFO2')   ? ' selected' : '';?> >San Francisco</option>
-                              <option value="LON1" <?php echo ($pt->config->space_region == 'LON1')   ? ' selected' : '';?> >London</option>
-                              <option value="FRA1" <?php echo ($pt->config->space_region == 'FRA1')   ? ' selected' : '';?> >Frankfurt</option>
-                              <option value="TOR1" <?php echo ($pt->config->space_region == 'TOR1')   ? ' selected' : '';?> >Toronto</option>
-                              <option value="BLR1" <?php echo ($pt->config->space_region == 'BLR1')   ? ' selected' : '';?> >Bangalore</option>
+                              <option value="auto" selected>Auto</option>
                             </select>
                         </div>
                         <hr>
                         <div class="clearfix"></div>
                         <br>
                         <div class="alert alert-info">
-                            Before enabling Digitalocean, make sure you upload the whole "upload/" folder to your bucket. <br><br>
-                            Before disabling Digitalocean, make sure you download the whole "upload/" folder to your server. <br><br>
+                            Before enabling Cloudflare R2, make sure you upload the whole "upload/" folder to your bucket. <br><br>
+                            Before disabling Cloudflare R2, make sure you download the whole "upload/" folder to your server. <br><br>
                             If your site is still brand new, you can escape the upload step, but make sure to click on "Test Connection". <br>
                         </div>
                         <button type="button" class="btn btn-warning m-t-15 waves-effect" onclick="Wo_TestSpaces()">Test Connection</button>
@@ -317,22 +310,22 @@ function Wo_TestSpaces() {
                 $('.spaces-settings-alert').empty();
             }, 2000);
         } else if (data.status == 300) {
-            $('.spaces-settings-alert').html("<div class='alert alert-danger'>Bucket doesn\'t exists</div>");
+            $('.spaces-settings-alert').html("<div class='alert alert-danger'>R2 bucket not found. Check the bucket name and access permissions.</div>");
             setTimeout(function () {
                 $('.spaces-settings-alert').empty();
             }, 2000);
         } else if (data.status == 500) {
-            $('.spaces-settings-alert').html("<div class='alert alert-danger'>Your s3 account doesn\'t have any buckets, please create one.</div>");
+            $('.spaces-settings-alert').html("<div class='alert alert-danger'>Unable to access the R2 bucket. Check the bucket name and access permissions.</div>");
             setTimeout(function () {
                 $('.spaces-settings-alert').empty();
             }, 2000);
         } else if (data.status == 400) {
-            $('.spaces-settings-alert').html("<div class='alert alert-danger'>"+data.message+"</div>");
+            $('.spaces-settings-alert').empty().append($('<div>').addClass('alert alert-danger').text(typeof data.message === 'string' ? data.message : 'Unable to connect to Cloudflare R2. Check your S3 credentials and bucket settings.'));
             setTimeout(function () {
                 $('.spaces-settings-alert').empty();
             }, 2000);
         } else  {
-            $('.spaces-settings-alert').html("<div class='alert alert-danger'>Error while connecting to amazone, please check your details</div>");
+            $('.spaces-settings-alert').html("<div class='alert alert-danger'>Unable to connect to Cloudflare R2. Check your S3 credentials and bucket settings.</div>");
             setTimeout(function () {
                 $('.spaces-settings-alert').empty();
             }, 2000);
