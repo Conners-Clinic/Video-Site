@@ -87,7 +87,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
         $configProviders[] = self::fallback();
 
         $memo = self::memoize(
-            call_user_func_array('self::chain', $configProviders)
+            call_user_func_array([ConfigurationProvider::class, 'chain'], $configProviders)
         );
 
         if (isset($config['csm']) && $config['csm'] instanceof CacheInterface) {
@@ -172,7 +172,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
                 return self::reject("'$profile' not found in config file");
             }
             if (!isset($data[$profile]['csm_enabled'])) {
-                return self::reject("Required CSM config values not present in 
+                return self::reject("Required CSM config values not present in
                     INI profile '{$profile}' ({$filename})");
             }
 
@@ -182,7 +182,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
             }
 
             // port is optional
-            if (empty($data[$profile]['csm_port'])) {
+            if (!filter_var($data[$profile]['csm_port'] ?? null, FILTER_VALIDATE_INT)) {
                 $data[$profile]['csm_port'] = self::DEFAULT_PORT;
             }
 

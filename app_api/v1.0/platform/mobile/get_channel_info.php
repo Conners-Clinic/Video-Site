@@ -40,10 +40,7 @@ else{
 	}
 
 	else{
-		//$channel_info      = array_intersect_key(ToArray($channel_info), array_flip($user_public_data));
-		$channel_info      = ToArray($channel_info);
-		unset($channel_info['password']);
-		unset($channel_info['email_code']);
+		$channel_info = array_intersect_key(ToArray($channel_info), array_flip($user_public_data));
 
 		if (empty($channel_info['about'])) {
 			$channel_info['about'] = "";

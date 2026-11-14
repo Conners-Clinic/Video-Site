@@ -1,4 +1,5 @@
 <?php
+PT_RequireSameOriginPost($pt->config->site_url);
 if (IS_LOGGED == true) {
 	header("Location: " . PT_Link(''));
 	exit();
@@ -32,45 +33,45 @@ if (!empty($_POST)) {
             $login = $db->getOne(T_USERS);
             
             if (!empty($login)) {
-                $hash                = 'sha1';
-                if (strlen($login->password) == 60) {
-                    $hash = 'password_hash';
+                $logged = PT_VerifyPassword($password, $login->password);
+                // Legacy SHA1 accounts historically hashed the SQL/HTML-normalized password.
+                if (!$logged && preg_match('/\A[a-f0-9]{40}\z/Di', $login->password)) {
+                    $logged = PT_VerifyPassword(PT_Secure($password), $login->password);
                 }
-
-                $logged = false;
-                if ($hash == 'password_hash') {
-                    if (password_verify($password, $login->password)) {
-                        $logged = true;
-                    }
-                } else {
-                    $login_password = $hash(PT_Secure($password));
-                    $is_logged = $db->where("(username = ? or email = ?)", array(
-                                    $username,
-                                    $username
-                                ))->where("password", $login_password)->getOne(T_USERS);
-                    if (!empty($is_logged)) {
-                        $new_password = PT_Secure(password_hash($password, PASSWORD_DEFAULT));
-                        $db->where('id',$is_logged->id)->update(T_USERS,array('password' => $new_password));
-                        $logged = true;
-                    }
+                if (preg_match('/\A[a-f0-9]{40}\z/Di', $login->password)) {
+                    $provider_sources = array('google', 'facebook', 'twitter', 'vkontakte', 'linkedin', 'instagram', 'qq', 'wechat', 'discord', 'mailru', 'tiktok', 'wowonder');
+                    $known_email_password = hash_equals(strtolower($login->password), sha1((string) $login->email));
+                    $legacy_provider_password = in_array(strtolower((string) ($login->src ?? '')), $provider_sources, true);
+                    // These legacy provider passwords were generated from public email/time data.
+                    // A verified password reset issues a modern hash; do not migrate a known weak secret into a new session.
+                    if ($known_email_password || $legacy_provider_password) { $logged = false; }
+                }
+                if ($logged && password_needs_rehash($login->password, PASSWORD_DEFAULT)) {
+                    $db->where('id', $login->id)->update(T_USERS, array('password' => password_hash($password, PASSWORD_DEFAULT)));
                 }
 
                 if ($logged) {
-                    if ($login->active == 0) {
+                    if ((int) $login->active !== 1) {
                         $errors = $error_icon . $lang->account_is_not_active . ' <a href="{{LINK resend/' . $login->email_code . '/' . $login->username . '}}">' . $lang->resend_email . '</a>';
                     } 
 
                     else {
-                        if ($pt->config->two_factor_setting == 'on' && $login->two_factor == 1) {
+                        if ((int) $login->two_factor === 1) {
+                            if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                            $_SESSION['pending_login'] = array(
+                                'user_id' => (int) $login->id, 'method' => $login->two_factor_method,
+                                'issued' => time(), 'attempts' => 0,
+                                'remember' => $pt->config->remember_device == 1 && !empty($_POST['remember_device']) && $_POST['remember_device'] === 'on'
+                            );
                             $email        = $login->email;
                             $db->where("email", $email);
                             $user_id = $db->getValue(T_USERS, "id");
-                            setcookie("two_factor_method", $login->two_factor_method, time() + (60 * 60), "/");
-                            setcookie("two_factor_username", $login->username, time() + (60 * 60), "/");
+                            setcookie("two_factor_method", $login->two_factor_method, array('expires' => time() + 300, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
+                            setcookie("two_factor_username", $login->username, array('expires' => time() + 300, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
                             if (!empty($user_id) && $login->two_factor_method == 'two_factor') {
                                    $rest_user = PT_UserData($user_id);
-                                   $email_code = rand(111111, 999999);
-                                   $hash_code = md5($email_code);
+                                   $email_code = random_int(100000, 999999);
+                                   $hash_code = '2fa:' . md5((string) $email_code) . ':' . time() . ':0';
                                    $update_data = array('email_code' => $hash_code);
                                    $db->where('id', $rest_user->id);
                                    $update = $db->update(T_USERS, $update_data);
@@ -94,7 +95,8 @@ if (!empty($_POST)) {
                             header("Location: $site_url/two_factor_login");
                             exit();
                         }
-                        $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                        if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                        $session_id          = bin2hex(random_bytes(32));
                         $platform_details = serialize(getBrowser());
                         $insert_data         = array(
                             'user_id' => $login->id,
@@ -103,30 +105,16 @@ if (!empty($_POST)) {
                             'time' => time()
                         );
                         $insert              = $db->insert(T_SESSIONS, $insert_data);
-                        $_SESSION['user_id'] = $session_id;
+                        if (!$insert) { http_response_code(503); return; }
+            $_SESSION['user_id'] = $session_id;
                         if ($pt->config->remember_device == 1 && !empty($_POST['remember_device']) && $_POST['remember_device'] == 'on') {
-                            setcookie("user_id", $session_id, time() + (10 * 365 * 24 * 60 * 60), "/");
+                            setcookie("user_id", $session_id, array('expires' => time() + (30 * 24 * 60 * 60), 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'));
                         }
                         $pt->loggedin = true;
 
-                        if (!empty($_GET['to']) && strpos($_GET['to'], $pt->config->site_url) !== false) {
-                            $_GET['to'] = strip_tags($_GET['to']);
-                            $site_url = $_GET['to'];
-                        }
-                        
-
-                        $db->where('id',$login->id)->update(T_USERS,array(
-                            'ip_address' => get_ip_address()
-                        ));
-                        
-                        if (!empty($_GET['red'])) {
-                            $site_url = urldecode($_GET['red']);
-                        }
-                        else{
-                            if (!empty($_SERVER) && !empty($_SERVER['HTTP_REFERER']) && pt_is_url($_SERVER['HTTP_REFERER'])) {
-                                $site_url = PT_Secure($_SERVER['HTTP_REFERER']);
-                            }
-                        }
+                        $redirect_candidate = $_GET['red'] ?? ($_GET['to'] ?? ($_SERVER['HTTP_REFERER'] ?? ''));
+                        $site_url = PT_SafeAuthRedirect($redirect_candidate, $pt->config->site_url);
+                        $db->where('id', $login->id)->update(T_USERS, array('ip_address' => get_ip_address()));
                         header("Location: $site_url");
                         exit();
                     }

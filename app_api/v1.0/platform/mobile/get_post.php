@@ -24,8 +24,8 @@ else{
 	$id = PT_Secure($_POST['id']);
 	$post   = $db->where('id', $id)->getOne(T_POSTS);
 	if (!empty($post)) {
-		$post->orginal_text =  $post->text;
-		$post->text =  strip_tags(htmlspecialchars_decode($post->text));
+		$post->orginal_text = htmlspecialchars(PT_SanitizeArticleHtml(PT_Decode($post->text)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$post->text =  strip_tags(PT_SanitizeArticleHtml(PT_Decode($post->text)));
 		$post->views = number_format($post->views);
 		$post->image = PT_GetMedia($post->image);
 		$post->url = PT_Link('articles/read/' . PT_URLSlug($post->title,$post->id));

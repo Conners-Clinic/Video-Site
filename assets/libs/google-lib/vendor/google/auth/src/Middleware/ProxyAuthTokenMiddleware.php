@@ -53,13 +53,13 @@ class ProxyAuthTokenMiddleware
      * Creates a new ProxyAuthTokenMiddleware.
      *
      * @param FetchAuthTokenInterface $fetcher is used to fetch the auth token
-     * @param callable $httpHandler (optional) callback which delivers psr7 request
-     * @param callable $tokenCallback (optional) function to be called when a new token is fetched.
+     * @param callable|null $httpHandler (optional) callback which delivers psr7 request
+     * @param callable|null $tokenCallback (optional) function to be called when a new token is fetched.
      */
     public function __construct(
         FetchAuthTokenInterface $fetcher,
-        callable $httpHandler = null,
-        callable $tokenCallback = null
+        ?callable $httpHandler = null,
+        ?callable $tokenCallback = null
     ) {
         $this->fetcher = $fetcher;
         $this->httpHandler = $httpHandler;
@@ -142,9 +142,9 @@ class ProxyAuthTokenMiddleware
     }
 
     /**
-     * @return string|null;
+     * @return string|null
      */
-    private function getQuotaProject()
+    private function getQuotaProject(): ?string
     {
         if ($this->fetcher instanceof GetQuotaProjectInterface) {
             return $this->fetcher->getQuotaProject();

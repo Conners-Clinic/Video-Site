@@ -119,7 +119,7 @@ else{
 	    );
 	} 
 
-	else if (strlen($_POST['password']) < 6) {
+	else if (strlen($_POST['password']) < 6 || strlen($_POST['password']) > 72) {
 	    $response_data       = array(
 	        'api_status'     => '400',
 	        'api_version'    => $api_version,
@@ -154,9 +154,9 @@ else{
 
 	else if (empty($response_data['errors'])) {
 	    $username                   = PT_Secure($_POST['username'], 0);
-	    $password                   = PT_Secure($_POST['password'], 0);
+	    $password                   = $_POST['password'];
 	    $email                      = PT_Secure($_POST['email'], 0);
-	    $email_code                 = sha1(time() + rand(111,999));
+	    $email_code                 = bin2hex(random_bytes(20));
 	    $gender                     = 'male';
 
 	    if (!empty($_POST['gender'])) {
@@ -167,7 +167,7 @@ else{
 
 	    $active           = ($pt->config->validation == 'on') ? 0 : 1;
 	    $password_hashed  = password_hash($password, PASSWORD_DEFAULT);
-	    $email_code       = sha1(time() + rand(111,999));
+	    $email_code       = bin2hex(random_bytes(20));
         $insert_data      = array(
             'username'    => $username,
             'password'    => $password_hashed,
@@ -268,7 +268,8 @@ else{
             } 
 
             else {
-                $session_id      = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                $session_id      = bin2hex(random_bytes(32));
                 $platforms       = array('phone','web');
 
                 foreach ($platforms as $platform_name) {
@@ -280,6 +281,7 @@ else{
 	                );
 
                 	$insert = $db->insert(T_SESSIONS, $insert_data);
+                    if (!$insert) { $response_data = array('api_status' => '503', 'api_version' => $api_version); return; }
                 }
                 
                 if (!empty($insert)) {

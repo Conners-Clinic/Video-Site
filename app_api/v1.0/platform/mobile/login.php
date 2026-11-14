@@ -36,7 +36,7 @@ else {
         }
     }
     $username        = PT_Secure($_POST['username']);
-    $password        = PT_Secure($_POST['password']);
+    $password        = $_POST['password'];
     //$password_hashed = sha1($password);
 
     $db->where("(username = ? or email = ? or phone_number = ?)", array($username,$username,$username));
@@ -44,31 +44,24 @@ else {
     $user = $db->getOne(T_USERS);
 
     if (!empty($user)) {
-        $hash                = 'sha1';
-        if (strlen($user->password) == 60) {
-            $hash = 'password_hash';
+        $logged = PT_VerifyPassword($password, $user->password);
+        if (!$logged && is_string($password) && preg_match('/\A[a-f0-9]{40}\z/Di', $user->password)) {
+            $logged = PT_VerifyPassword(PT_Secure($password), $user->password);
         }
-
-        $logged = false;
-        if ($hash == 'password_hash') {
-            if (password_verify($password, $user->password)) {
-                $logged = true;
-            }
-        } else {
-            $login_password = $hash(PT_Secure($password));
-            $is_logged = $db->where("(username = ? or email = ?)", array(
-                            $username,
-                            $username
-                        ))->where("password", $login_password)->getOne(T_USERS);
-            if (!empty($is_logged)) {
-                $new_password = PT_Secure(password_hash($password, PASSWORD_DEFAULT));
-                $db->where('id',$is_logged->id)->update(T_USERS,array('password' => $new_password));
-                $logged = true;
-            }
+        if (preg_match('/\A[a-f0-9]{40}\z/Di', $user->password)) {
+            $provider_sources = array('google', 'facebook', 'twitter', 'vkontakte', 'linkedin', 'instagram', 'qq', 'wechat', 'discord', 'mailru', 'tiktok', 'wowonder');
+            $known_email_password = hash_equals(strtolower($user->password), sha1((string) $user->email));
+            $legacy_provider_password = in_array(strtolower((string) ($user->src ?? '')), $provider_sources, true);
+            // These legacy provider passwords were generated from public email/time data.
+            // A verified password reset issues a modern hash; do not migrate a known weak secret into a new session.
+            if ($known_email_password || $legacy_provider_password) { $logged = false; }
+        }
+        if ($logged && password_needs_rehash($user->password, PASSWORD_DEFAULT)) {
+            $db->where('id', $user->id)->update(T_USERS, array('password' => password_hash($password, PASSWORD_DEFAULT)));
         }
 
         if ($logged) {
-            if ($user->active == 0) {
+            if ((int) $user->active !== 1) {
                 $response_data       = array(
                     'api_status'     => '304',
                     'api_version'    => $api_version,
@@ -80,14 +73,19 @@ else {
                     ) 
                 );
             } 
-            elseif ($pt->config->two_factor_setting == 'on' && $user->two_factor == 1) {
+            elseif ((int) $user->two_factor === 1) {
+                if ($pt->config->two_factor_setting !== 'on' || $user->two_factor_method !== 'two_factor') {
+                    $response_data = array('api_status' => '400', 'api_version' => $api_version,
+                        'errors' => array('error_id' => '2', 'error_text' => 'Complete two-factor sign-in on the website.'));
+                    return;
+                }
                 $email        = $user->email;
                 $db->where("email", $email);
                 $user_id = $db->getValue(T_USERS, "id");
                 if (!empty($user_id)) {
                    $rest_user = PT_UserData($user_id);
-                   $email_code = rand(111111, 999999);
-                   $hash_code = md5($email_code);
+                   $email_code = random_int(100000, 999999);
+                   $hash_code = '2fa:' . md5((string) $email_code) . ':' . time() . ':0';
                    $update_data = array('email_code' => $hash_code);
                    $db->where('id', $rest_user->id);
                    $update = $db->update(T_USERS, $update_data);
@@ -120,7 +118,8 @@ else {
                 if (!empty($_POST['device_id'])) {
                     $db->where('id',$user->id)->update(T_USERS,array('device_id' => PT_Secure($_POST['device_id'])));
                 }
-                $session_id          = sha1(rand(11111, 99999)) . time() . md5(microtime());
+                if (session_status() === PHP_SESSION_ACTIVE) { session_regenerate_id(true); }
+                $session_id          = bin2hex(random_bytes(32));
                 $platforms           = array('phone','web');
                 foreach ($platforms as $platform_name) {
                     $insert_data     = array(
@@ -131,6 +130,7 @@ else {
                     );
 
                     $insert = $db->insert(T_SESSIONS, $insert_data);
+                    if (!$insert) { $response_data = array('api_status' => '503', 'api_version' => $api_version); return; }
                 }
 
                 $response_data       = array(

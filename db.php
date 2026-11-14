@@ -2,7 +2,7 @@
 
 require_once('./assets/init.php');
 
-if (!defined('IS_LOGGED') || !IS_LOGGED || empty($pt->user->admin)) {
+if (!defined('IS_LOGGED') || !IS_LOGGED || !PT_IsAdmin()) {
 
     $site_url  = !empty($pt->config->site_url) ? rtrim($pt->config->site_url, '/') : '';
     $last_url  = $site_url . '/db.php';
@@ -2257,7 +2257,8 @@ $(function () {
             },
 
             headers: {
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': <?php echo json_encode(PT_CreateSession()); ?>
             },
 
             /*

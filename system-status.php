@@ -1,5 +1,9 @@
 <?php
 require_once('assets/init.php');
+if (!defined('IS_LOGGED') || !IS_LOGGED || !PT_IsAdmin()) {
+    http_response_code(403);
+    exit('Administrator access required');
+}
 $getStatus = getStatus(['curl' => true, "nodejsport" => true, "htaccess" => true]);
 ?>
 <html lang="en">

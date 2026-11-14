@@ -276,11 +276,11 @@ if (!empty($pt->profile_fields)) {
     foreach ($pt->profile_fields as $field_data) {
         $field_data->fid  = 'fid_' . $field_data->id;
         $field_data->name = preg_replace_callback("/{{LANG (.*?)}}/", function($m) use ($pt) {
-            return (isset($pt->lang->$m[1])) ? $pt->lang->$m[1] : '';
+            return (isset($pt->lang->{$m[1]})) ? $pt->lang->{$m[1]} : '';
         }, $field_data->name);
 
         $field_data->description = preg_replace_callback("/{{LANG (.*?)}}/", function($m) use ($pt) {
-            return (isset($pt->lang->$m[1])) ? $pt->lang->$m[1] : '';
+            return (isset($pt->lang->{$m[1]})) ? $pt->lang->{$m[1]} : '';
         }, $field_data->description);
 
         if (!empty($pt->user->fields[$field_data->fid])) {

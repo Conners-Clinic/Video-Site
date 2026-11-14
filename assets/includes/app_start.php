@@ -1,4 +1,9 @@
 <?php
+// Bearer credentials in URLs leak into logs/referrers and permit forced browser login.
+if (array_key_exists('cookie', $_GET)) {
+    http_response_code(400);
+    exit('URL-based browser login is disabled');
+}
 // ini_set('display_errors', 1);
 // ini_set('display_startup_errors', 1);
 error_reporting(0);   
@@ -110,6 +115,7 @@ $pt->config               = ToObject($config);
 $pt->config->withdrawal_payment_method = json_decode($config['withdrawal_payment_method'],true);
 $langs                    = pt_db_langs();
 $pt->langs                = $langs;
+$pt->lang_modal_html      = '';
 
 try {
     $pt->iso = GetIso();
@@ -129,6 +135,7 @@ if (PT_IsLogged() == true) {
 
     if ($user->id < 0 || empty($user->id) || !is_numeric($user->id) || PT_UserActive($user->id) === false) {
         header("Location: " . PT_Link('logout'));
+        exit();
     }
     $pt->loggedin   = true;
 }
@@ -250,7 +257,7 @@ elseif (!empty($_GET['cookie']) && $pt->loggedin != true) {
                 $_SESSION['lang'] = $user->language;
             }
         }
-        setcookie("user_id", $session_id, time() + (10 * 365 * 24 * 60 * 60), "/");
+        setcookie("user_id", $session_id, array("expires" => time() + 30 * 86400, "path" => "/", "secure" => true, "httponly" => true, "samesite" => "Lax"));
     }
 }
 $pt->phone_api        = 'no';
@@ -279,7 +286,7 @@ if (empty($_SESSION['lang'])) {
 
 if (isset($_SESSION['user_id'])) {
     if (empty($_COOKIE['user_id'])) {
-        setcookie("user_id", $_SESSION['user_id'], time() + (10 * 365 * 24 * 60 * 60), "/");
+        setcookie("user_id", $_SESSION['user_id'], array("expires" => time() + 30 * 86400, "path" => "/", "secure" => true, "httponly" => true, "samesite" => "Lax"));
     }
 }
 
@@ -414,7 +421,25 @@ if ($pt->config->user_ads == 'on') {
     );
 
     if (!empty($_COOKIE['_uads'])) {
-        $pt->user_ad_cons = unserialize(html_entity_decode($_COOKIE['_uads']));
+        // Untrusted cookies must never instantiate PHP objects.
+        $ad_cookie = @unserialize(html_entity_decode($_COOKIE['_uads']), array('allowed_classes' => false));
+        if (is_array($ad_cookie)
+            && isset($ad_cookie['date'], $ad_cookie['uaid_'])
+            && is_int($ad_cookie['date'])
+            && is_array($ad_cookie['uaid_'])) {
+            $ad_cookie_valid = true;
+            foreach ($ad_cookie['uaid_'] as $ad_cookie_key => $ad_cookie_value) {
+                if ((!is_int($ad_cookie_key) && !is_string($ad_cookie_key))
+                    || (!is_int($ad_cookie_value) && !is_string($ad_cookie_value) && !is_bool($ad_cookie_value))) {
+                    $ad_cookie_valid = false;
+                    break;
+                }
+            }
+            if ($ad_cookie_valid) {
+                $pt->user_ad_cons = $ad_cookie;
+            }
+        }
+        unset($ad_cookie, $ad_cookie_valid, $ad_cookie_key, $ad_cookie_value);
     }
 
     if (!is_array($pt->user_ad_cons) || !isset($pt->user_ad_cons['date']) || !isset($pt->user_ad_cons['uaid_'])) {
@@ -500,8 +525,21 @@ if (!empty($_COOKIE['v_shorts'])) {
     $pt->v_shorts = json_decode($_COOKIE['v_shorts'],true);
 }
 
-$pt->config->currency_array = unserialize($pt->config->currency_array);
-$pt->config->currency_symbol_array = unserialize($pt->config->currency_symbol_array);
+// Serialized configuration is data only, never PHP objects.
+foreach (array('currency_array', 'currency_symbol_array') as $currency_config_key) {
+    $currency_config_value = @unserialize($pt->config->{$currency_config_key}, array('allowed_classes' => false));
+    $currency_config_valid = is_array($currency_config_value);
+    if ($currency_config_valid) {
+        foreach ($currency_config_value as $currency_config_entry) {
+            if (!is_string($currency_config_entry)) {
+                $currency_config_valid = false;
+                break;
+            }
+        }
+    }
+    $pt->config->{$currency_config_key} = $currency_config_valid ? $currency_config_value : array();
+}
+unset($currency_config_key, $currency_config_value, $currency_config_valid, $currency_config_entry);
 
 $pt->paypal_currency = array('USD','EUR','AUD','BRL','CAD','CZK','DKK','HKD','HUF','INR','ILS','JPY','MYR','MXN','TWD','NZD','NOK','PHP','PLN','GBP','RUB','SGD','SEK','CHF','THB');
 $pt->checkout_currency = array('USD','EUR','AED','AFN','ALL','ARS','AUD','AZN','BBD','BDT','BGN','BMD','BND','BOB','BRL','BSD','BWP','BYN','BZD','CAD','CHF','CLP','CNY','COP','CRC','CZK','DKK','DOP','DZD','EGP','FJD','GBP','GTQ','HKD','HNL','HRK','HUF','IDR','ILS','INR','JMD','JOD','JPY','KES','KRW','KWD','KZT','LAK','LBP','LKR','LRD','MAD','MDL','MMK','MOP','MRO','MUR','MVR','MXN','MYR','NAD','NGN','NIO','NOK','NPR','NZD','OMR','PEN','PGK','PHP','PKR','PLN','PYG','QAR','RON','RSD','RUB','SAR','SBD','SCR','SEK','SGD','SYP','THB','TND','TOP','TRY','TTD','TWD','UAH','UYU','VND','VUV','WST','XCD','XOF','YER','ZAR');

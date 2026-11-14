@@ -176,7 +176,18 @@ $old_notifications = $db->where('recipient_id',0)->where('admin',1)->where('seen
 <!-- App css -->
     <link rel="stylesheet" href="<?php echo(PT_LoadAdminLink('assets/css/app.css')) ?>" type="text/css">
     <!-- Main scripts -->
-<script src="<?php echo(PT_LoadAdminLink('vendors/bundle.js')) ?>"></script>
+<script src="<?php echo(PT_LoadAdminLink('vendors/bundle.js')) ?>?securityrev=20261111"></script>
+<script>
+(function () {
+    var csrfToken = <?php echo json_encode(PT_CreateSession()); ?>;
+    $.ajaxPrefilter(function (options, originalOptions, xhr) {
+        var target = new URL(options.url || window.location.href, window.location.href);
+        if (target.origin === window.location.origin) {
+            xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+        }
+    });
+}());
+</script>
 
     <!-- Apex chart -->
     <script src="<?php echo(PT_LoadAdminLink('vendors/charts/apex/apexcharts.min.js')) ?>"></script>
@@ -185,7 +196,7 @@ $old_notifications = $db->where('recipient_id',0)->where('admin',1)->where('seen
     <script src="<?php echo(PT_LoadAdminLink('vendors/datepicker/daterangepicker.js')) ?>"></script>
 
     <!-- DataTable -->
-    <script src="<?php echo(PT_LoadAdminLink('vendors/dataTable/datatables.min.js')) ?>"></script>
+    <script src="<?php echo(PT_LoadAdminLink('vendors/dataTable/datatables.min.js')) ?>?securityrev=20261111"></script>
 
     <!-- Dashboard scripts -->
     <?php if ($page == 'dashboard') { ?>
@@ -200,15 +211,16 @@ $old_notifications = $db->where('recipient_id',0)->where('admin',1)->where('seen
 <script src="<?php echo PT_LoadAdminLink('assets/js/admin.js'); ?>"></script>
 <link rel="stylesheet" href="<?php echo(PT_LoadAdminLink('vendors/select2/css/select2.min.css')) ?>" type="text/css">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" type="text/css">
-<?php if ($page == 'create-article' || $page == 'edit-article' || $page == 'manage-announcements' || $page == 'newsletters') { ?>
-<script src="<?php echo PT_LoadAdminLink('vendors/tinymce/js/tinymce/tinymce.min.js'); ?>"></script>
+<?php if ($page == 'create-article' || $page == 'edit-article' || $page == 'manage-announcements' || $page == 'newsletters' || $page == 'edit-terms-pages') { ?>
+<script src="<?php echo PT_LoadAdminLink('vendors/tinymce/js/tinymce/tinymce.min.js'); ?>?securityrev=8.10.2-20261111"></script>
+<script src="<?php echo htmlspecialchars((string) $pt->config->site_url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>/assets/js/pt-richtext.js?securityrev=8.10.2-20261111"></script>
 <script src="<?php echo PT_LoadAdminLink('vendors/bootstrap-tagsinput/src/bootstrap-tagsinput.js'); ?>"></script>
 <link href="<?php echo PT_LoadAdminLink('vendors/bootstrap-tagsinput/src/bootstrap-tagsinput.css'); ?>" rel="stylesheet" />
 <?php } ?>
 <?php if ($page == 'custom-design') { ?>
-<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/lib/codemirror.js'); ?>"></script>
-<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/mode/css/css.js'); ?>"></script>
-<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/mode/javascript/javascript.js'); ?>"></script>
+<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/lib/codemirror.js'); ?>?securityrev=20261111"></script>
+<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/mode/css/css.js'); ?>?securityrev=20261111"></script>
+<script src="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/mode/javascript/javascript.js'); ?>?securityrev=20261111"></script>
 <link rel="stylesheet" href="<?php echo PT_LoadAdminLink('vendors/codemirror-5.30.0/lib/codemirror.css'); ?>">
 <?php } ?>
 

@@ -13,7 +13,7 @@ class SimpleXMLElement extends XMLElement
      * @param string $namespace
      * @return XMLElement
      */
-    public function addChild($name, $value = null, $namespace = null)
+    public function addChild($name, $value = null, $namespace = null): ?XMLElement
     {
         if ($value !== null and is_string($value) === true) {
             $value = str_replace('&', '&amp;', $value);

@@ -31,13 +31,14 @@ if (!IS_LOGGED) {
 
 } else {
 
-	$id      = PT_Secure($_POST['id']);
-	$user    = PT_UserData($id);
+	$actor = $pt->user;
+	$id = (int) $_POST['id'];
+	$target_user = PT_UserData($id);
 
-	$request = (!empty($user) && (PT_IsAdmin() || ($user->id == $id)));
+	$request = (!empty($actor->id) && !empty($target_user->id) && (PT_IsAdmin() || ((int) $actor->id === $id)));
 
 	if ($request === true) {
-		if ($user->password != sha1($_POST['current_password'])) {
+		if (!PT_VerifyPassword($_POST['current_password'], $actor->password)) {
 			$response_data       = array(
 		        'api_status'     => '404',
 		        'api_version'    => $api_version,
@@ -47,7 +48,7 @@ if (!IS_LOGGED) {
 		        )
 		    );
         } else {
-        	$delete = PT_DeleteUser($user->id);
+        	$delete = PT_DeleteUser($target_user->id);
             if ($delete) {
                 $response_data     = array(
 				    'api_status'   => '200',

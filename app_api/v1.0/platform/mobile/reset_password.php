@@ -40,7 +40,7 @@ else{
 
     if (!empty($user_id)) {
         $rest_user   = PT_UserData($user_id);
-        $email_code  = sha1(time() + rand(111,999));
+        $email_code  = 'rst:' . bin2hex(random_bytes(16)) . ':' . time();
         $update_data = array('email_code' => $email_code);
 
         $db->where('id', $rest_user->id);

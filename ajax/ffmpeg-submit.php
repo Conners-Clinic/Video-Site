@@ -134,10 +134,10 @@ if (!empty($_POST['privacy']) && $_POST['privacy'] == 3 && (empty($_POST['date']
                 $start = PT_Secure($_POST['start']);
                 $end = PT_Secure($_POST['end']);
             }
-            $ffmpeg_b                   = $pt->config->ffmpeg_binary_file;
+            $ffmpeg_b                   = escapeshellarg($pt->config->ffmpeg_binary_file);
             $full_dir                   = str_replace('ajax', '/', __DIR__);
             $is_short = 1;
-            $sh_video_time = ' -ss '.$start.'  -to '.$end.' -async 1';
+            $sh_video_time = ' -ss '.escapeshellarg((string) $start).'  -to '.escapeshellarg((string) $end).' -async 1';
             $ex                   = explode('.', $_POST['video-location']);
             $video_output_full_path_144 = $ex[0] . "_144p_converted.mp4";
             if (file_exists($video_output_full_path_144)) {
@@ -147,7 +147,9 @@ if (!empty($_POST['privacy']) && $_POST['privacy'] == 3 && (empty($_POST['date']
                 PT_DeleteFromToS3($video_output_full_path_144);
             }
             $video_output_full_path__ = $full_dir . $ex[0] . "_shorts.".$ex[1];
-            $shell     = shell_exec("$ffmpeg_b -y -i ".$full_dir . $_POST['video-location']." -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 $sh_video_time ".$video_output_full_path__." 2>&1");
+            $short_input_arg = escapeshellarg($full_dir . $_POST['video-location']);
+            $short_output_arg = escapeshellarg($video_output_full_path__);
+            $shell = shell_exec("$ffmpeg_b -y -i $short_input_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 $sh_video_time $short_output_arg 2>&1");
             @unlink($_POST['video-location']);
             $_POST['video-location'] = $ex[0] . "_shorts.".$ex[1];
         }
@@ -446,7 +448,7 @@ if(isset($_POST['featured'])){
                                    'processing' => 2));
                 }
 
-                $ffmpeg_b                   = $pt->config->ffmpeg_binary_file;
+                $ffmpeg_b                   = escapeshellarg($pt->config->ffmpeg_binary_file);
                 $filepath                   = explode('.', $_POST['video-location'])[0];
                 $time                       = time();
                 $full_dir                   = str_replace('ajax', '/', __DIR__);
@@ -459,17 +461,25 @@ if(isset($_POST['featured'])){
                 $video_output_full_path_2048 = $full_dir . $filepath . "_2048p_converted.mp4";
                 $video_output_full_path_4096 = $full_dir . $filepath . "_4096p_converted.mp4";
 
+                $video_output_full_path_240_arg = escapeshellarg($video_output_full_path_240);
+                $video_output_full_path_360_arg = escapeshellarg($video_output_full_path_360);
+                $video_output_full_path_480_arg = escapeshellarg($video_output_full_path_480);
+                $video_output_full_path_720_arg = escapeshellarg($video_output_full_path_720);
+                $video_output_full_path_1080_arg = escapeshellarg($video_output_full_path_1080);
+                $video_output_full_path_2048_arg = escapeshellarg($video_output_full_path_2048);
+                $video_output_full_path_4096_arg = escapeshellarg($video_output_full_path_4096);
                 $video_file_full_path       = $full_dir . $_POST['video-location'];
+                $video_file_full_path_arg = escapeshellarg($video_file_full_path);
                 // demo Video
                 $video_time = '';
                 $demo_video = '';
                 $gif_video = '';
                 $gif_time = 3;
-                $gif_video_time = '-t '.$gif_time.'  -async 1';
+                $gif_video_time = '-t '.escapeshellarg((string) $gif_time).'  -async 1';
                 if ($pt->config->demo_video == 'on' && !empty($data_insert['sell_video'])) {
                     if (!empty($duration_file['playtime_seconds']) && $duration_file['playtime_seconds'] > 0) {
                         $video_time = round((10 * round($duration_file['playtime_seconds'],0)) / 100,0);
-                        $video_time = '-t '.$video_time.'  -async 1';
+                        $video_time = '-t '.escapeshellarg((string) $video_time).'  -async 1';
                         $have_demo = true;
                     }
                 }
@@ -490,7 +500,7 @@ if(isset($_POST['featured'])){
                 if ($pt->config->gif_system == 'on' && empty($gif_video) && empty($_POST['is_movie'])) {
                     $gif_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()). "_small_video_.gif";
 
-                    $shell     = shell_exec("$ffmpeg_b $gif_video_time -y -i $video_file_full_path ".$full_dir . $gif_video);
+                    $shell     = shell_exec("$ffmpeg_b $gif_video_time -y -i $video_file_full_path_arg ".escapeshellarg($full_dir . $gif_video));
 
                     $upload_s3 = PT_UploadToS3($gif_video);
                     $db->where('id', $insert);
@@ -553,7 +563,7 @@ if(isset($_POST['featured'])){
                 // gif Video
 
                 if ($pt->config->p240 == "on") {
-                  $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 $video_output_full_path_240 2>&1");
+                  $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 $video_output_full_path_240_arg 2>&1");
                   // echo $filepath . "_240p_converted.mp4";
                   // echo "<br>";
                   // echo $video_output_full_path_240;
@@ -570,7 +580,7 @@ if(isset($_POST['featured'])){
                   }
                   if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                       $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_240p_demo.mp4";
-                      $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                      $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=426:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                       $upload_s3 = PT_UploadToS3($demo_video);
                       $db->where('id', $insert);
                       $db->update(T_VIDEOS, array(
@@ -581,7 +591,9 @@ if(isset($_POST['featured'])){
                 if ($is_stock == 1 && !empty($data_insert['sell_video'])) {
                     $water = $full_dir."/themes/youplay/img/icon.png";
                     $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()). "_video_demo.mp4";
-                    $shell     = shell_exec("{$ffmpeg_b} -i {$video_file_full_path} -i {$water} -filter_complex \"[1]geq=r='r(X,Y)':a='0.5*alpha(X,Y)'[a];[0][a]overlay=(W-w)/2:(H-h)/2\" $demo_video");
+                    $water_arg = escapeshellarg($water);
+                    $demo_video_arg = escapeshellarg($demo_video);
+                    $shell     = shell_exec("{$ffmpeg_b} -i {$video_file_full_path_arg} -i {$water_arg} -filter_complex \"[1]geq=r='r(X,Y)':a='0.5*alpha(X,Y)'[a];[0][a]overlay=(W-w)/2:(H-h)/2\" $demo_video_arg");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
                         'demo' => $demo_video
@@ -590,7 +602,7 @@ if(isset($_POST['featured'])){
                 }
 
                 if ($video_res >= 3840 && $pt->config->p4096 == "on") {
-                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 $video_output_full_path_4096 2>&1");
+                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 $video_output_full_path_4096_arg 2>&1");
                     $upload_s3 = PT_UploadToS3($filepath . "_4096p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -602,7 +614,7 @@ if(isset($_POST['featured'])){
 
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()). "_video_4096p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -614,7 +626,7 @@ if(isset($_POST['featured'])){
                     // gif video
                     if ($pt->config->gif_system == 'on' && empty($gif_video)) {
                         $gif_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()). "_video_4096p_gif.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $gif_video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 ".$full_dir . $gif_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $gif_video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=3840:-2 -crf 26 ".escapeshellarg($full_dir . $gif_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($gif_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -624,7 +636,7 @@ if(isset($_POST['featured'])){
                     // gif video
                 }
                 if ($video_res >= 2048 && $pt->config->p2048 == "on") {
-                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=2048:-2 -crf 26 $video_output_full_path_2048 2>&1");
+                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=2048:-2 -crf 26 $video_output_full_path_2048_arg 2>&1");
                     $upload_s3 = PT_UploadToS3($filepath . "_2048p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -635,7 +647,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_2048p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=2048:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=2048:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -645,7 +657,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                 }
                 if (($video_res >= 1920 || $video_res == 0) && $pt->config->p1080 == "on") {
-                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1920:-2 -crf 26 $video_output_full_path_1080 2>&1");
+                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1920:-2 -crf 26 $video_output_full_path_1080_arg 2>&1");
                     $upload_s3 = PT_UploadToS3($filepath . "_1080p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -656,7 +668,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_1080p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1920:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1920:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -666,7 +678,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                 }
                 if (($video_res >= 1280 || $video_res == 0) && $pt->config->p720 == "on") {
-                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1280:-2 -crf 26 $video_output_full_path_720 2>&1");
+                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1280:-2 -crf 26 $video_output_full_path_720_arg 2>&1");
                     $upload_s3 = PT_UploadToS3($filepath . "_720p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -677,7 +689,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_720p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1280:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=1280:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -687,7 +699,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                 }
                 if (($video_res >= 854 || $video_res == 0) && $pt->config->p480 == "on") {
-                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=854:-2 -crf 26 $video_output_full_path_480 2>&1");
+                    $shell     = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=854:-2 -crf 26 $video_output_full_path_480_arg 2>&1");
                     $upload_s3 = PT_UploadToS3($filepath . "_480p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -698,7 +710,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_480p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=854:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=854:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(
@@ -708,7 +720,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                 }
                 if (($video_res >= 640 || $video_res == 0) && $pt->config->p360 == "on") {
-                    $shell                      = shell_exec("$ffmpeg_b -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=640:-2 -crf 26 $video_output_full_path_360 2>&1");
+                    $shell                      = shell_exec("$ffmpeg_b -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=640:-2 -crf 26 $video_output_full_path_360_arg 2>&1");
                     $upload_s3                  = PT_UploadToS3($filepath . "_360p_converted.mp4");
                     $db->where('id', $insert);
                     $db->update(T_VIDEOS, array(
@@ -719,7 +731,7 @@ if(isset($_POST['featured'])){
                     // demo Video
                     if ($pt->config->demo_video == 'on' && empty($demo_video) && $have_demo == true) {
                         $demo_video = substr($filepath, 0,strpos($filepath, '_video') - 10).sha1(time()) . "_video_360p_demo.mp4";
-                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=640:-2 -crf 26 ".$full_dir . $demo_video." 2>&1");
+                        $shell     = shell_exec("$ffmpeg_b $video_time -y -i $video_file_full_path_arg -vcodec libx264 -preset {$pt->config->convert_speed} -filter:v scale=640:-2 -crf 26 ".escapeshellarg($full_dir . $demo_video)." 2>&1");
                         $upload_s3 = PT_UploadToS3($demo_video);
                         $db->where('id', $insert);
                         $db->update(T_VIDEOS, array(

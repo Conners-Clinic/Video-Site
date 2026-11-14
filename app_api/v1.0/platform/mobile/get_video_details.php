@@ -1,4 +1,7 @@
 <?php
+$blocked_query_ids = PT_SecurityIdList($pt->blocked_array ?? array());
+if ($blocked_query_ids === false) { PT_SecurityBadInput(); }
+require_once dirname(__DIR__, 4) . '/assets/includes/video_security.php';
 // +------------------------------------------------------------------------+
 // | @author Deen Doughouz (DoughouzForest)
 // | @author_url 1: http://www.playtubescript.com
@@ -44,6 +47,11 @@ else{
 
 		$video_data = PT_GetVideoByID($video->video_id,0,1);
 
+        if (!empty($video_data) && !PT_SecurityCanViewVideo($video_data)) {
+            $response_data = array('api_status' => '404', 'api_version' => $api_version,
+                'errors' => array('error_id' => '2', 'error_text' => 'Video does not exist or is unavailable'));
+            return;
+        }
 		if (!empty($video_data)) {
 			$t_videos                     = T_VIDEOS;
 			$video_data->is_subscribed    = 0;
@@ -70,15 +78,16 @@ else{
 			$sql_query         = "
 				SELECT * FROM `$t_videos` 
 				WHERE MATCH (title) 
-				AGAINST ('$video_title') 
-				AND id <> '{$video_data->id}' 
+				AGAINST (?) 
+				AND id <> ? AND privacy = 0 AND approved = 1 AND user_id NOT IN (" . implode(',', $blocked_query_ids ?: array(0)) . ") 
 				ORDER BY `id` DESC 
 				LIMIT 20";
 
-			$related_videos = $db->rawQuery($sql_query);
+			$related_videos = $db->rawQuery($sql_query, array($video_title, (int) $video_data->id));
 
 			foreach ($related_videos as $related_video) {
 				$related_video         = PT_GetVideoByID($related_video, 0, 1, 0);
+                if (empty($related_video) || !PT_SecurityCanViewVideo($related_video)) { continue; }
 				$user_data             = PT_UserData($related_video->user_id);
 				$related_video->owner  = array_intersect_key(
 					ToArray($user_data), 

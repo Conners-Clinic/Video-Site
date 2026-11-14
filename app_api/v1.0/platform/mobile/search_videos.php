@@ -45,8 +45,8 @@ else{
 	    }
 	}
 
-	$limit    = (!empty($_GET['limit'])  && is_numeric($_GET['limit']))  ? $_GET['limit']  : 10;
-	$offset   = (!empty($_GET['offset']) && is_numeric($_GET['offset'])) ? $_GET['offset'] : null;
+	$limit    = (!empty($_GET['limit'])  && is_numeric($_GET['limit']))  ? max(1, min(50, (int) $_GET['limit'])) : 10;
+	$offset   = (!empty($_GET['offset']) && is_numeric($_GET['offset'])) ? max(0, (int) $_GET['offset']) : null;
 	$keyword  = PT_Secure($_GET['keyword']);
 	$table    = T_VIDEOS;
 	$xsql     = '';
@@ -56,8 +56,8 @@ else{
 	}
 
 	//$sql      = "SELECT `video_id` FROM `$table` WHERE MATCH (`title`) AGAINST ('$keyword') {$xsql} ORDER BY id ASC LIMIT {$limit}";
-	$sql      = "SELECT `video_id` FROM `$table` WHERE title LIKE '%$keyword%' AND privacy = 0 {$xsql} {$date} ORDER BY id ASC LIMIT {$limit}";
-	$videos   = $db->rawQuery($sql);
+	$sql      = "SELECT `video_id` FROM `$table` WHERE title LIKE ? AND privacy = 0 {$xsql} {$date} ORDER BY id ASC LIMIT {$limit}";
+	$videos   = $db->rawQuery($sql, array("%" . $keyword . "%"));
 
 	$response_data    = array(
         'api_status'  => '200',

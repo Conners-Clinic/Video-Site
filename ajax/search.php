@@ -6,7 +6,7 @@ if ($pt->admin === true) {
 $data = array('status' => 400);
 if (!empty($_POST['search_value'])) {
 	$search_value = PT_Secure($_POST['search_value']);
-	$search_result = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE (title LIKE '%$search_value%' OR tags LIKE '%$search_value%' OR description LIKE '%$search_value%') $privacy LIMIT 10");
+	$search_result = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE (title LIKE ? OR tags LIKE ? OR description LIKE ?) $privacy LIMIT 10", array("%" . $search_value . "%", "%" . $search_value . "%", "%" . $search_value . "%"));
 	if (!empty($search_result)) {
 		$html = '';
 		foreach ($search_result as $key => $search) {

@@ -45,7 +45,7 @@ use GuzzleHttp\Promise\PromiseInterface;
 class ConfigurationProvider extends AbstractConfigurationProvider
     implements ConfigurationProviderInterface
 {
-    const DEFAULT_ENDPOINTS_TYPE = 'legacy';
+    const DEFAULT_ENDPOINTS_TYPE = 'regional';
     const ENV_ENDPOINTS_TYPE = 'AWS_STS_REGIONAL_ENDPOINTS';
     const ENV_PROFILE = 'AWS_PROFILE';
     const INI_ENDPOINTS_TYPE = 'sts_regional_endpoints';
@@ -82,7 +82,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
         $configProviders[] = self::fallback();
 
         $memo = self::memoize(
-            call_user_func_array('self::chain', $configProviders)
+            call_user_func_array([ConfigurationProvider::class, 'chain'], $configProviders)
         );
 
         if (isset($config['sts_regional_endpoints'])
@@ -124,7 +124,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
     {
         return function () {
             return Promise\Create::promiseFor(
-                new Configuration(self::DEFAULT_ENDPOINTS_TYPE)
+                new Configuration(self::DEFAULT_ENDPOINTS_TYPE, true)
             );
         };
     }
@@ -160,7 +160,7 @@ class ConfigurationProvider extends AbstractConfigurationProvider
                 return self::reject("'$profile' not found in config file");
             }
             if (!isset($data[$profile][self::INI_ENDPOINTS_TYPE])) {
-                return self::reject("Required STS regional endpoints config values 
+                return self::reject("Required STS regional endpoints config values
                     not present in INI profile '{$profile}' ({$filename})");
             }
 

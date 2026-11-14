@@ -1,5 +1,14 @@
 {
     "require": {
-        "aws/aws-sdk-php": "^3.232"
+        "aws/aws-sdk-php": "^3.372",
+        "guzzlehttp/guzzle": "^7.15.2",
+        "guzzlehttp/psr7": "^2.12.3",
+        "mtdowling/jmespath.php": "^2.9.1"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.35"
+        },
+        "allow-plugins": false
     }
 }

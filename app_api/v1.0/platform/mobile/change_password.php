@@ -27,31 +27,16 @@ if (!IS_LOGGED) {
         )
     );
 } else {
-    $user_data = PT_UserData($user->id);
+    $user_data = PT_UserData($pt->user->id);
     if (!empty($user_data->id)) {
         if (empty($_POST['current_password']) || empty($_POST['new_password']) || empty($_POST['confirm_new_password'])) {
             $errors =  $lang->please_check_details;
         } else {
             $password = $_POST['current_password'];
-            $hash                = 'sha1';
-            if (strlen($user_data->password) == 60) {
-                $hash = 'password_hash';
+            if (!PT_VerifyPassword($password, $user_data->password)) {
+                $errors[] = $lang->current_password_dont_match;
             }
-            $logged = false;
-            if ($hash == 'password_hash') {
-                if (password_verify($password, $user_data->password)) {
-                    $logged = true;
-                }
-                else{
-                    $errors[] = $lang->current_password_dont_match;
-                }
-            } else {
-                $login_password = $hash(PT_Secure($password));
-                if ($user_data->password != $login_password) {
-                    $errors[] = $lang->current_password_dont_match;
-                }
-            }
-            if (strlen($_POST['new_password']) < 4) {
+            if (strlen($_POST['new_password']) < 6 || strlen($_POST['new_password']) > 72) {
                 $errors = $lang->password_is_short;
             }
             if ($_POST['new_password'] != $_POST['confirm_new_password']) {
@@ -63,6 +48,7 @@ if (!IS_LOGGED) {
                 );
                 $update = $db->where('id', PT_Secure($user_data->id))->update(T_USERS, $update_data);
                 if ($update) {
+                        $db->where('user_id', $user_data->id)->delete(T_SESSIONS);
                     $response_data = array(
                         'api_status' => '200',
                         'api_version' => $api_version,

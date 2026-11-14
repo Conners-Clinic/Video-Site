@@ -15,8 +15,8 @@ else{
 	$posts = $db->where('active', '1')->orderBy('views', 'DESC')->get(T_POSTS, 7);
 
 	foreach ($posts as $key => $post) {
-		$post->orginal_text =  $post->text;
-		$post->text =  strip_tags(htmlspecialchars_decode($post->text));
+		$post->orginal_text = htmlspecialchars(PT_SanitizeArticleHtml(PT_Decode($post->text)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$post->text =  strip_tags(PT_SanitizeArticleHtml(PT_Decode($post->text)));
 		$post->views = number_format($post->views);
 		$post->image = PT_GetMedia($post->image);
 		$post->url = PT_Link('articles/read/' . PT_URLSlug($post->title,$post->id));

@@ -15,11 +15,11 @@ $username = PT_Secure($_GET['u_id']);
 
 $check_for_code = $db->where('username', $username)->where('email_code', $email_code)->getOne(T_USERS);
 
-if (empty($check_for_code)) {
+if (empty($check_for_code) || (int) $check_for_code->active !== 0 || !preg_match('/\A[a-f0-9]{40}\z/D', $email_code)) {
 	header("Location: " . PT_Link(''));
     exit();
 }
-$email_code = sha1(time() + rand(111,999));
+$email_code = bin2hex(random_bytes(20));
 $db->where('username', $username)->update(T_USERS, array('email_code' => $email_code));
 $link = $email_code . '/' . $check_for_code->email; 
 $data['EMAIL_CODE'] = $link;

@@ -34,13 +34,13 @@ $page = $db->where('lang_key',PT_Secure($_GET['type']))->getOne(T_LANGS);
                             if (!in_array($key, array('id','lang_key','type'))  ) { ?>
                         <div class="form-group form-float">
                             <div class="form-line">
-                                <label class="form-label"><?php echo(ucfirst($key)) ?> (HTML Allowed)</label>
-                                <textarea name="<?php echo($key); ?>" id="<?php echo($key); ?>" class="form-control" cols="30" rows="10"><?php echo $value;?></textarea>
+                                <label class="form-label"><?php echo htmlspecialchars(ucfirst((string) $key), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false); ?> (HTML Allowed)</label>
+                                <textarea name="<?php echo htmlspecialchars((string) $key, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false); ?>" id="<?php echo htmlspecialchars((string) $key, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false); ?>" class="form-control" cols="30" rows="10"><?php echo htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);?></textarea>
                             </div>
                         </div>
                         <br>
                         <?php } }  ?>
-                        <input type="hidden" name="lang_key" value="<?php echo $page->lang_key;?>">
+                        <input type="hidden" name="lang_key" value="<?php echo htmlspecialchars((string) $page->lang_key, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);?>">
                         <button type="submit" class="btn btn-primary m-t-15 waves-effect">Save</button>
                     </form>
                 </div>
@@ -55,8 +55,8 @@ $(function() {
     <?php 
     foreach ($page as $key => $value) {
         if (!in_array($key, array('id','lang_key','type'))  ) { ?>
-    tinymce.init({
-          selector: '#<?php echo($key); ?>',
+    PT_InitRichText({
+          target: document.getElementById(<?php echo json_encode((string) $key, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>),
           height: 270,
           entity_encoding : "raw",
           paste_data_images: true,
@@ -80,7 +80,10 @@ $(function() {
         beforeSubmit : function(arr, $form, options){
             for (var i = 0; i < arr.length; i++) {
                 if (arr[i].name != "hash_id" && arr[i].name != "lang_key") {
-                    arr[i].value = btoa(unescape(encodeURIComponent($("#"+arr[i].name).value=tinymce.editors[$("#"+arr[i].name).attr('id')].getContent())));
+                    var termEditor = tinymce.get(arr[i].name);
+                    if (termEditor) {
+                        arr[i].value = btoa(unescape(encodeURIComponent(termEditor.getContent())));
+                    }
                 }
             }
         },

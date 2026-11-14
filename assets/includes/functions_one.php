@@ -33,8 +33,8 @@ function PT_UserData($user_id = 0, $options = array()) {
     $fetched_data->url    = PT_Link('@' . $fetched_data->username);
     $fetched_data->about_decoded = br2nl($fetched_data->about);
 
-    $explode2  = @end(explode('.', $fetched_data->ex_cover));
-    $explode3  = @explode('.', $fetched_data->ex_cover);
+    $explode3  = explode('.', (string) $fetched_data->ex_cover);
+    $explode2  = end($explode3);
     $fetched_data->full_cover = PT_GetMedia($fetched_data->ex_cover);
     if ($fetched_data->ex_cover != 'upload/photos/d-cover.jpg') {
         $fetched_data->full_cover = PT_GetMedia($explode3[0] . '_full.' . $explode2);
@@ -94,6 +94,12 @@ function PT_GetConfig() {
     $configs = $db->get(T_CONFIG);
     foreach ($configs as $key => $config) {
         $data[$config->name] = $config->value;
+    }
+    // Executable configuration must never be supplied by the application database.
+    $data['ffmpeg_binary_file'] = '/usr/bin/ffmpeg';
+    $ffmpeg_presets = array('ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow');
+    if (!isset($data['convert_speed']) || !is_string($data['convert_speed']) || !in_array($data['convert_speed'], $ffmpeg_presets, true)) {
+        $data['convert_speed'] = 'medium';
     }
     return $data;
 }
@@ -626,33 +632,6 @@ function PT_SendMessage($data = array()) {
 function PT_ShareFile($data = array(), $type = 0) {
     global $pt, $mysqli, $db;
     $allowed = '';
-    if (!file_exists('upload/photos/' . date('Y'))) {
-        @mkdir('upload/photos/' . date('Y'), 0777, true);
-    }
-    if (!file_exists('upload/photos/' . date('Y') . '/' . date('m'))) {
-        @mkdir('upload/photos/' . date('Y') . '/' . date('m'), 0777, true);
-    }
-    if (!file_exists('upload/timeline/' . date('Y') . '/' . date('m'))) {
-        @mkdir('upload/timeline/' . date('Y') . '/' . date('m'), 0777, true);
-    }
-    if (!file_exists('upload/videos/' . date('Y'))) {
-        @mkdir('upload/videos/' . date('Y'), 0777, true);
-    }
-    if (!file_exists('upload/videos/' . date('Y') . '/' . date('m'))) {
-        @mkdir('upload/videos/' . date('Y') . '/' . date('m'), 0777, true);
-    }
-    if (!file_exists('upload/photos/' . date('Y').'/index.html')) {
-        @file_put_contents('upload/photos/' . date('Y').'/index.html','index.html');
-    }
-    if (!file_exists('upload/photos/' . date('Y') . '/' . date('m').'/index.html')) {
-        @file_put_contents('upload/photos/' . date('Y') . '/' . date('m').'/index.html','index.html');
-    }
-    if (!file_exists('upload/videos/' . date('Y').'/index.html')) {
-        @file_put_contents('upload/videos/' . date('Y').'/index.html','index.html');
-    }
-    if (!file_exists('upload/videos/' . date('Y') . '/' . date('m').'/index.html')) {
-        @file_put_contents('upload/videos/' . date('Y') . '/' . date('m').'/index.html','index.html');
-    }
     if (isset($data['file']) && !empty($data['file'])) {
         $data['file'] = $data['file'];
     }
@@ -678,6 +657,9 @@ function PT_ShareFile($data = array(), $type = 0) {
         );
     }
     if ($file_extension == 'jpg' || $file_extension == 'jpeg' || $file_extension == 'png' || $file_extension == 'gif' || $file_extension == 'webp') {
+        if (!PT_SecurityImageUpload($data['file'] ?? '', $file_extension)) {
+            return array('error' => 'Invalid image content');
+        }
         $folder   = 'photos';
         $fileType = 'image';
     } else {
@@ -686,6 +668,20 @@ function PT_ShareFile($data = array(), $type = 0) {
     }
     if (empty($folder) || empty($fileType)) {
         return false;
+    }
+    // Chunk assembly reads the video multipart input, so bind validation to those exact bytes.
+    if (!empty($_REQUEST['chunks'])) {
+        if ($fileType !== 'video') {
+            return array('error' => 'Chunked uploads are supported only for video');
+        }
+        if (!isset($data['file']) || !is_string($data['file']) ||
+            !isset($_FILES['video']) || !is_array($_FILES['video']) ||
+            !isset($_FILES['video']['tmp_name'], $_FILES['video']['error']) ||
+            !is_string($_FILES['video']['tmp_name']) || $_FILES['video']['tmp_name'] === '' ||
+            $data['file'] !== $_FILES['video']['tmp_name'] ||
+            $_FILES['video']['error'] !== UPLOAD_ERR_OK) {
+            return array('error' => 'Invalid chunked upload input');
+        }
     }
     $ar = array(
         'video/mp4',
@@ -720,6 +716,33 @@ function PT_ShareFile($data = array(), $type = 0) {
         );
     }
 
+    if (!file_exists('upload/photos/' . date('Y'))) {
+        @mkdir('upload/photos/' . date('Y'), 0777, true);
+    }
+    if (!file_exists('upload/photos/' . date('Y') . '/' . date('m'))) {
+        @mkdir('upload/photos/' . date('Y') . '/' . date('m'), 0777, true);
+    }
+    if (!file_exists('upload/timeline/' . date('Y') . '/' . date('m'))) {
+        @mkdir('upload/timeline/' . date('Y') . '/' . date('m'), 0777, true);
+    }
+    if (!file_exists('upload/videos/' . date('Y'))) {
+        @mkdir('upload/videos/' . date('Y'), 0777, true);
+    }
+    if (!file_exists('upload/videos/' . date('Y') . '/' . date('m'))) {
+        @mkdir('upload/videos/' . date('Y') . '/' . date('m'), 0777, true);
+    }
+    if (!file_exists('upload/photos/' . date('Y').'/index.html')) {
+        @file_put_contents('upload/photos/' . date('Y').'/index.html','index.html');
+    }
+    if (!file_exists('upload/photos/' . date('Y') . '/' . date('m').'/index.html')) {
+        @file_put_contents('upload/photos/' . date('Y') . '/' . date('m').'/index.html','index.html');
+    }
+    if (!file_exists('upload/videos/' . date('Y').'/index.html')) {
+        @file_put_contents('upload/videos/' . date('Y').'/index.html','index.html');
+    }
+    if (!file_exists('upload/videos/' . date('Y') . '/' . date('m').'/index.html')) {
+        @file_put_contents('upload/videos/' . date('Y') . '/' . date('m').'/index.html','index.html');
+    }
     $fileNameOriginal = PT_GenerateKey() . '_' . date('d') . '_' . md5(time()) . "_{$fileType}.{$file_extension}";
 
     $dir         = "upload/{$folder}/" . date('Y') . '/' . date('m');
@@ -744,6 +767,12 @@ function PT_ShareFile($data = array(), $type = 0) {
     
 
     
+    // Resumed chunk names are database data and must obey the same filename policy.
+    if (!is_string($fileNameOriginal) ||
+        !preg_match('/\A[a-zA-Z0-9_-]+\.[a-zA-Z0-9]{2,5}\z/D', $fileNameOriginal) ||
+        !in_array(strtolower(pathinfo($fileNameOriginal, PATHINFO_EXTENSION)), $extension_allowed, true)) {
+        return array('error' => 'Invalid upload filename');
+    }
     $filename    = $dir . '/' .$fileNameOriginal;
     $second_file = pathinfo($filename, PATHINFO_EXTENSION);
     if (!empty($_REQUEST['chunks'])) {
@@ -1125,6 +1154,7 @@ function PT_UploadLogo($data = array()) {
     if (!in_array($file_extension, $extension_allowed)) {
         return false;
     }
+    if (!PT_SecurityImageUpload($data['file'] ?? '', 'png')) { return false; }
     $logo_name = 'logo';
     if (!empty($data['light-logo'])) {
         $logo_name = 'logo-light';
@@ -1153,26 +1183,11 @@ function PT_GetTerms() {
 }
 
 function PT_CreateMainSession() {
-    $hash = substr(sha1(rand(1111, 9999)), 0, 70);
-    if (!empty($_SESSION['main_hash_id'])) {
-        $_SESSION['main_hash_id'] = $_SESSION['main_hash_id'];
-        return $_SESSION['main_hash_id'];
-    }
-    $_SESSION['main_hash_id'] = $hash;
-    return $hash;
+    return PT_SecurityToken('main_hash_id');
 }
 
 function PT_CheckMainSession($hash = '') {
-    if (!isset($_SESSION['main_hash_id']) || empty($_SESSION['main_hash_id'])) {
-        return false;
-    }
-    if (empty($hash)) {
-        return false;
-    }
-    if ($hash == $_SESSION['main_hash_id']) {
-        return true;
-    }
-    return false;
+    return PT_SecurityTokenMatches('main_hash_id', $hash);
 }
 function PT_UploadToS3($filename, $config = array()) {
     global $pt;
@@ -2190,10 +2205,16 @@ function PT_GetUserSessions($user_id = 0)
                 $user->browser = 'Desktop Application';
             }
             if (!empty($user->platform_details)) {
-                $uns = unserialize($user->platform_details);
-                $user->browser = $uns['name'];
-                $user->platform = ucfirst($uns['platform']);
-                $user->ip_address = $uns['ip_address'];
+                $uns = @unserialize($user->platform_details, array('allowed_classes' => false));
+                if (is_array($uns)
+                    && isset($uns['name'], $uns['platform'], $uns['ip_address'])
+                    && is_string($uns['name'])
+                    && is_string($uns['platform'])
+                    && is_string($uns['ip_address'])) {
+                    $user->browser = $uns['name'];
+                    $user->platform = ucfirst($uns['platform']);
+                    $user->ip_address = $uns['ip_address'];
+                }
             }
             $data[] = $user;
         }
@@ -3190,8 +3211,8 @@ function BackblazeConnect($args=[])
 
     curl_setopt($session, CURLOPT_HTTPHEADER, $headers); 
 
-    curl_setopt($session, CURLOPT_SSL_VERIFYHOST, FALSE);
-    curl_setopt($session, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_setopt($session, CURLOPT_SSL_VERIFYHOST, 2);
+    curl_setopt($session, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($session, CURLOPT_RETURNTRANSFER, true);  // Receive server response
     $server_output = curl_exec($session); // Let's do this!
     curl_close ($session); // Clean up
@@ -3218,8 +3239,8 @@ function GetTiktokVideoDownloadLink($url='')
         CURLOPT_COOKIEFILE     => 'cookie.txt',
         CURLOPT_REFERER        => 'https://www.tiktok.com/',
         CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_TIMEOUT        => 30,
         CURLOPT_MAXREDIRS      => 10,
     );
@@ -3288,35 +3309,8 @@ function SaveTiktokVideo($url='')
         @file_put_contents('upload/videos/' . date('Y') . '/' . date('m').'/index.html','index.html');
     }
 
-    $ch = curl_init();
-    $headers = array(
-        'Range: bytes=0-',
-    );
-    $options = array(
-        CURLOPT_URL            => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER         => false,
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLINFO_HEADER_OUT    => true,
-        CURLOPT_USERAGENT => 'okhttp',
-        CURLOPT_ENCODING       => "utf-8",
-        CURLOPT_AUTOREFERER    => true,
-        CURLOPT_COOKIEJAR      => 'cookie.txt',
-    CURLOPT_COOKIEFILE     => 'cookie.txt',
-        CURLOPT_REFERER        => 'https://www.tiktok.com/',
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_MAXREDIRS      => 10,
-    );
-    curl_setopt_array( $ch, $options );
-
-    $data = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    curl_close($ch);
+    $data = PT_SecurityRemoteRequest($url);
+    if ($data === false) { return false; }
 
     $filename = 'upload/videos/' . date('Y') . '/' . date('m').'/' .PT_GenerateKey() . ".mp4";
     $d = fopen($filename, "w");
@@ -3360,35 +3354,8 @@ function SaveTiktokImage($url='')
         @file_put_contents('upload/videos/' . date('Y') . '/' . date('m').'/index.html','index.html');
     }
 
-    $ch = curl_init();
-    $headers = array(
-        'Range: bytes=0-',
-    );
-    $options = array(
-        CURLOPT_URL            => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER         => false,
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLINFO_HEADER_OUT    => true,
-        CURLOPT_USERAGENT => 'okhttp',
-        CURLOPT_ENCODING       => "utf-8",
-        CURLOPT_AUTOREFERER    => true,
-        CURLOPT_COOKIEJAR      => 'cookie.txt',
-    CURLOPT_COOKIEFILE     => 'cookie.txt',
-        CURLOPT_REFERER        => 'https://www.tiktok.com/',
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_MAXREDIRS      => 10,
-    );
-    curl_setopt_array( $ch, $options );
-
-    $data = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    curl_close($ch);
+    $data = PT_SecurityRemoteRequest($url);
+    if ($data === false) { return false; }
 
     $filename = 'upload/photos/' . date('Y') . '/' . date('m').'/' .PT_GenerateKey() . ".jpg";
     $d = fopen($filename, "w");
@@ -3540,8 +3507,8 @@ function getStatus($config = array()) {
         curl_setopt ( $ch, CURLOPT_HEADER, 0 );
         curl_setopt ( $ch, CURLOPT_RETURNTRANSFER, 1 );
         curl_setopt ( $ch, CURLOPT_CONNECTTIMEOUT, $timeout );
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         $file_contents = curl_exec ( $ch );
         if (curl_errno ( $ch )) {
             $errors[] = ["type" => "error", "message" => "<strong>cURL</strong> is not functioning, can't connect to the outside world, error found: <strong>" . curl_error ( $ch ) . "</strong>, please contact your hosting provider to fix it."];
@@ -3701,7 +3668,7 @@ function http_request_call($method, $url, $header, $data, $json){
     $curl = curl_init();
     curl_setopt($curl, CURLOPT_URL, $url);
     curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($curl, CURLOPT_HEADER, 0);
 
     if( $header !== 0 ){
@@ -3802,21 +3769,7 @@ function addToHashTags($text)
     return $text;
 }
 function fetchDataFromURL($url = '') {
-    if (empty($url)) {
-        return false;
-    }
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_POST, false);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows; U; Windows NT 5.0; en-US; rv:1.7.12) Gecko/20050915 Firefox/1.0.7");
-    curl_setopt($ch, CURLOPT_HEADER, false);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    return curl_exec($ch);
+    return PT_SecurityRemoteRequest($url);
 }
 function addNewRefUser($price,$percent)
 {
@@ -3921,8 +3874,8 @@ function urlGetFacebookContents($url)
     curl_setopt_array($curl, array(
         CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_ENCODING => '',
         CURLOPT_MAXREDIRS => 10,
         CURLOPT_TIMEOUT => 0,
@@ -4012,8 +3965,8 @@ function getInstagramContents($url)
     curl_setopt($ch, CURLOPT_HEADER, 0);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36');
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
     curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
@@ -4441,9 +4394,11 @@ function updateDashboardDB($type='This Year',$data=[])
 }
 function createBackupCodes($count = 10)
 {
+    $count = max(1, min(20, (int) $count));
     $backupCodes = array();
-    for ($i = 1; $i <= 10; $i++) {
-        $backupCodes[] = rand(111111,999999);
+    while (count($backupCodes) < $count) {
+        $backupCodes[] = bin2hex(random_bytes(8));
+        $backupCodes = array_values(array_unique($backupCodes));
     }
     return $backupCodes;
 }
