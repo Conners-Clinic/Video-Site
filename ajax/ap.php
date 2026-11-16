@@ -4822,7 +4822,9 @@ if ($first == 'transcribe_settings') {
         'transcript_language',
         'transcript_channel_usernames',
         'openai_api_key',
-        'openai_model',
+        'seo_pipeline_model_summary',
+        'seo_pipeline_model_summary_sections',
+        'transcript_auto_apply_description',
         'clinic_cta_html',
         'watch_cta_eyebrow',
         'watch_cta_headline',
@@ -4863,8 +4865,11 @@ if ($first == 'transcribe_settings') {
             if ($key == 'transcript_system') {
                 $val = ($val == 'on') ? 'on' : 'off';
             }
-            if ($key == 'transcript_load_monitor') {
+            if ($key == 'transcript_load_monitor' || $key == 'transcript_auto_apply_description') {
                 $val = ($val == 'on') ? 'on' : 'off';
+            }
+            if (strpos($key, 'seo_pipeline_model_') === 0 && !preg_match('/^[A-Za-z0-9._:-]{1,64}$/', $val)) {
+                continue; // blank or malformed model name: keep the current value
             }
             if ($key == 'transcript_load_alert_email') {
                 $val = trim($val);
@@ -5027,6 +5032,34 @@ if ($first == 'transcribe_regenerate_summaries') {
     }
 }
 
+if ($first == 'transcribe_regenerate_summary') {
+    // Regenerate ONE video's summary/takeaways from the stored transcript (no audio, no Whisper).
+    // Never touches videos.description unless apply_description=1 is sent explicitly.
+    $video_id = !empty($_POST['video_id']) ? (int) $_POST['video_id'] : 0;
+    if ($video_id < 1) {
+        $data = array('status' => 400, 'message' => 'Invalid video');
+    } elseif (empty(trim($pt->config->openai_api_key))) {
+        $data = array('status' => 400, 'message' => 'Set OpenAI API key in settings first');
+    } else {
+        $result = PT_RegenerateSeoSummaryForVideo($video_id, array(
+            'force' => !empty($_POST['force']),
+            'apply_description' => !empty($_POST['apply_description']),
+        ));
+        if (!empty($result['ok'])) {
+            $data = array(
+                'status' => 200,
+                'message' => 'Summary regenerated (' . $result['mode'] . ', ' . (int) $result['usage']['calls'] . ' call(s), about $' . number_format((float) $result['usage']['cost_usd'], 4) . ')',
+                'summary' => $result['summary'],
+                'key_takeaways' => $result['key_takeaways'],
+                'usage' => $result['usage'],
+                'description_applied' => $result['description_applied'],
+            );
+        } else {
+            $data = array('status' => !empty($result['skipped']) ? 409 : 400, 'message' => $result['error']);
+        }
+    }
+}
+
 if ($first == 'transcribe_apply_descriptions') {
     $user_id = !empty($_POST['channel_id']) ? (int) $_POST['channel_id'] : 0;
     $limit = !empty($_POST['batch_limit']) ? (int) $_POST['batch_limit'] : 10;
@@ -5172,7 +5205,7 @@ if ($first == 'seo_pipeline_settings') {
         'seo_pipeline_queue_count',
         'seo_pipeline_max_concurrent',
     );
-    $model_keys = array('pass_0', 'entity_extraction', 'entity_comparison', 'entity_review_queue', 'pass_1', 'pass_2', 'pass_3', 'pass_4');
+    $model_keys = array_values(array_diff(PT_AiStageList(), array('entity_auto_merge')));
     foreach ($model_keys as $mk) {
         $allowed[] = 'seo_pipeline_model_' . $mk;
     }
@@ -5184,6 +5217,9 @@ if ($first == 'seo_pipeline_settings') {
             $val = PT_Secure($_POST[$key], 0, false);
             if ($key == 'seo_pipeline_system') {
                 $val = ($val == 'on') ? 'on' : 'off';
+            }
+            if (strpos($key, 'seo_pipeline_model_') === 0 && !preg_match('/^[A-Za-z0-9._:-]{1,64}$/', $val)) {
+                continue; // blank or malformed model name: keep the current value
             }
             $exists = $db->where('name', $key)->getValue(T_CONFIG, 'COUNT(*)');
             if ($exists) {
@@ -5220,8 +5256,9 @@ if ($first == 'seo_pipeline_get_article') {
             'status' => 200,
             'article' => PT_SeoArticleToArray($article),
             'video' => $video,
-            'transcript_status' => !empty($transcript) ? $transcript->status : null,
+            'transcript_status' => !empty($transcript) ? PT_DbVal($transcript, 'status') : null,
             'logs' => $logs ? $logs : array(),
+            'usage' => PT_AiJobUsageReport($video_id),
         );
     }
 }
@@ -5382,7 +5419,7 @@ if ($first == 'seo_pipeline_get_config_files') {
     } elseif ($type === 'entity_library') {
         $files[] = array('slug' => 'entity-library', 'content' => json_encode(PT_LoadEntityLibrary(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     } elseif ($type === 'models') {
-        $files[] = array('slug' => 'pipeline-models', 'content' => json_encode(PT_LoadSeoPipelineModels(), JSON_PRETTY_PRINT));
+        $files[] = array('slug' => 'pipeline-models', 'content' => json_encode(PT_AiConfig(true), JSON_PRETTY_PRINT));
     }
     $data = array('status' => 200, 'files' => $files);
 }
@@ -5420,6 +5457,8 @@ if ($first == 'seo_pipeline_save_config_file') {
         $decoded = json_decode($content, true);
         if (!is_array($decoded)) {
             $data = array('status' => 400, 'message' => 'Invalid JSON');
+        } elseif (empty($decoded['defaults']) || empty($decoded['models']) || empty($decoded['stage_settings'])) {
+            $data = array('status' => 400, 'message' => 'Config must keep the "defaults", "models" and "stage_settings" sections');
         } elseif (PT_SeoPipelineWriteJsonFile('config/pipeline-models.json', $decoded)) {
             $data = array('status' => 200, 'message' => 'Models config saved');
         } else {

@@ -19,7 +19,8 @@ Separate from **transcription** (Whisper). Transcription writes `video_transcrip
 |--------|----------|
 | Prompt templates | `content-pipeline/prompts/*.md` |
 | Standards | `content-pipeline/standards/*.json` |
-| Model defaults | `content-pipeline/config/pipeline-models.json` |
+| Model names, per-stage settings, prices, limits | `content-pipeline/config/pipeline-models.json` (only place model names live) |
+| OpenAI client, budgets, chunking | `assets/includes/functions_ai.php`, `functions_ai_summary.php` |
 | Version tracking | `content-pipeline/config/versions.json` |
 | Orchestration | `assets/includes/functions_seo_pipeline.php` |
 | Queue worker | `seo-pipeline-cron.php` |
@@ -28,7 +29,7 @@ Separate from **transcription** (Whisper). Transcription writes `video_transcrip
 
 ## Pipeline flow
 
-1. **Pass 0** — Clean transcript → `cleaned_transcript` (raw copied to `raw_transcript` once)
+1. **Pass 0** — Clean transcript (whole transcript, in token-sized chunks; every chunk checked for dropped text and changed numbers; a chunk that fails verification keeps its raw text and is flagged in `transcript_quality`) → `cleaned_transcript` (raw copied to `raw_transcript` once)
 2. **Entity extraction** — JSON
 3. **Entity comparison** — JSON
 4. **Auto-merge** — Deterministic PHP (updates `entity-library.json`)
@@ -48,7 +49,7 @@ Stored in `video_seo_articles` (see user spec in project brief). All pass output
 
 If an article already exists, admin chooses: `pass_0`, `pass_1`, `pass_2`, `pass_4`, or cancel.
 
-Failed runs: status `failed`, `failed_pass` set; re-queue resumes from the appropriate step.
+Failed runs: status `failed`, `failed_pass` set; re-queue **resumes at the failed pass** and keeps earlier outputs (no re-billing). A finished (`complete`) article is never re-queued without an explicit force/rerun. Only one worker can process a video at a time (named DB lock + atomic queue claim).
 
 ## Publishing (extension point)
 

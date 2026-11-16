@@ -11,6 +11,9 @@ function PT_DbVal($row, $key, $default = null) {
 }
 
 function PT_TranscriptRootDir() {
+    if (!empty($GLOBALS['PT_ROOT_OVERRIDE'])) {
+        return $GLOBALS['PT_ROOT_OVERRIDE']; // test hook: lets the offline tests use a temp copy of content-pipeline/
+    }
     $root = realpath(__DIR__ . '/../..');
     return ($root ? $root : dirname(__DIR__, 2)) . '/';
 }
@@ -216,8 +219,13 @@ function PT_ParseKeyTakeaways($stored) {
         if ($item === '') {
             continue;
         }
-        if (mb_strlen($item, 'UTF-8') > 160) {
-            $item = mb_substr($item, 0, 157, 'UTF-8') . '...';
+        if (mb_strlen($item, 'UTF-8') > 240) {
+            $cut = mb_substr($item, 0, 237, 'UTF-8');
+            $sp = mb_strrpos($cut, ' ', 0, 'UTF-8');
+            if ($sp !== false && $sp > 120) {
+                $cut = mb_substr($cut, 0, $sp, 'UTF-8');
+            }
+            $item = rtrim($cut, " ,;:-") . '...';
         }
         $items[] = $item;
         if (count($items) >= 5) {
@@ -586,79 +594,34 @@ function PT_GenerateTranscriptSeoSummary($video, $plain_text) {
         'summary' => $result['summary'],
         'key_takeaways' => $result['key_takeaways'],
         'error' => '',
+        'mode' => $result['mode'],
+        'sections' => $result['sections'],
+        'usage' => $result['usage'],
     );
 }
 
+/**
+ * Summary + key takeaways for the COMPLETE transcript (see functions_ai_summary.php).
+ * Models, limits and reasoning settings come from content-pipeline/config/pipeline-models.json.
+ */
 function PT_GenerateTranscriptAiContent($video, $plain_text) {
-    global $pt;
-    $api_key = !empty($pt->config->openai_api_key) ? trim($pt->config->openai_api_key) : '';
-    if ($api_key === '') {
-        return array('ok' => false, 'summary' => '', 'key_takeaways' => array(), 'error' => 'OpenAI API key is not configured');
-    }
-    $model = !empty($pt->config->openai_model) ? $pt->config->openai_model : 'gpt-4o-mini';
-    $title = !empty(PT_DbVal($video, 'title')) ? strip_tags(PT_DbVal($video, 'title')) : '';
-    $tags = !empty(PT_DbVal($video, 'tags')) ? strip_tags(PT_DbVal($video, 'tags')) : '';
-    $excerpt = mb_substr(trim($plain_text), 0, 6000, 'UTF-8');
-    $system = !empty($pt->config->openai_summary_prompt) ? $pt->config->openai_summary_prompt : PT_GetDefaultOpenAiSummaryPrompt();
-    if (stripos($system, 'key_takeaways') === false) {
-        $system .= ' ' . PT_GetDefaultOpenAiSummaryPrompt();
-    }
-    $user = "Video title: {$title}\nTags: {$tags}\n\nTranscript excerpt:\n{$excerpt}";
-    $payload = array(
-        'model' => $model,
-        'messages' => array(
-            array('role' => 'system', 'content' => $system),
-            array('role' => 'user', 'content' => $user),
-        ),
-        'temperature' => 0.4,
-        'max_tokens' => 500,
-        'response_format' => array('type' => 'json_object'),
-    );
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch, array(
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 90,
-        CURLOPT_HTTPHEADER => array(
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $api_key,
-        ),
-        CURLOPT_POSTFIELDS => json_encode($payload),
-    ));
-    $response = curl_exec($ch);
-    $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
-    if ($response === false) {
-        return array('ok' => false, 'summary' => '', 'key_takeaways' => array(), 'error' => 'OpenAI request failed: ' . $curl_error);
-    }
-    $data = json_decode($response, true);
-    if ($http_code < 200 || $http_code >= 300) {
-        $msg = !empty($data['error']['message']) ? $data['error']['message'] : substr($response, 0, 500);
-        return array('ok' => false, 'summary' => '', 'key_takeaways' => array(), 'error' => 'OpenAI HTTP ' . $http_code . ': ' . $msg);
-    }
-    $content = '';
-    if (!empty($data['choices'][0]['message']['content'])) {
-        $content = trim($data['choices'][0]['message']['content']);
-    }
-    if ($content === '') {
-        return array('ok' => false, 'summary' => '', 'key_takeaways' => array(), 'error' => 'OpenAI returned empty content');
-    }
-    $parsed = json_decode($content, true);
-    if (!is_array($parsed)) {
-        if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
-            $parsed = json_decode($m[0], true);
-        }
-    }
-    $normalized = PT_NormalizeTranscriptAiResponse($parsed);
-    if ($normalized['summary'] === '') {
-        return array('ok' => false, 'summary' => '', 'key_takeaways' => array(), 'error' => 'OpenAI returned an empty summary');
+    $result = PT_AiSummarizeTranscript($video, $plain_text);
+    if (empty($result['ok'])) {
+        return array(
+            'ok' => false, 'summary' => '', 'key_takeaways' => array(),
+            'error' => !empty($result['error']) ? $result['error'] : 'AI summary failed',
+            'usage' => !empty($result['usage']) ? $result['usage'] : array(),
+        );
     }
     return array(
         'ok' => true,
-        'summary' => $normalized['summary'],
-        'key_takeaways' => $normalized['key_takeaways'],
+        'summary' => $result['summary'],
+        'key_takeaways' => $result['key_takeaways'],
         'error' => '',
+        'mode' => $result['mode'],
+        'sections' => $result['sections'],
+        'usage' => $result['usage'],
+        'warnings' => $result['warnings'],
     );
 }
 
@@ -688,8 +651,16 @@ function PT_ApplyTranscriptToVideoDescription($video_id, $seo_summary) {
         $existing = trim(PT_DbVal($video, 'description', ''));
         $composed = $composed . ($existing !== '' ? "\n\n" . $existing : '');
     }
+    $applied = array('description_applied' => 1);
+    // Keep the pre-AI description once, so an overwrite can be undone (needs migration 2032).
+    if (PT_AiColumnExists(T_VIDEO_TRANSCRIPTS, 'description_backup')) {
+        $existing_row = PT_GetVideoTranscript($video_id);
+        if (empty(PT_DbVal($existing_row, 'description_backup'))) {
+            $applied['description_backup'] = (string) PT_DbVal($video, 'description', '');
+        }
+    }
     $db->where('id', $video_id)->update(T_VIDEOS, array('description' => $composed));
-    PT_UpsertVideoTranscript($video_id, array('description_applied' => 1));
+    PT_UpsertVideoTranscript($video_id, $applied);
     return true;
 }
 
@@ -702,6 +673,7 @@ function PT_FinalizeTranscriptWithSeo($video, $plain_text, $dest_rel, $language)
         'language' => $language,
         'error_message' => '',
     ));
+    PT_AiBudgetBegin('finalize_' . $video_id);
     $summary_result = PT_GenerateTranscriptSeoSummary($video, $plain_text);
     $seo_summary = '';
     $key_takeaways_db = null;
@@ -720,9 +692,15 @@ function PT_FinalizeTranscriptWithSeo($video, $plain_text, $dest_rel, $language)
         $seo_upsert['key_takeaways'] = $key_takeaways_db;
     }
     PT_UpsertVideoTranscript($video_id, $seo_upsert);
-    if ($seo_summary !== '') {
+    if ($seo_summary !== '' && PT_TranscriptAutoApplyDescription()) {
         PT_ApplyTranscriptToVideoDescription($video_id, $seo_summary);
     }
+}
+
+/** Descriptions are only rewritten automatically when this is explicitly switched on (default: off). */
+function PT_TranscriptAutoApplyDescription() {
+    global $pt;
+    return !empty($pt->config->transcript_auto_apply_description) && $pt->config->transcript_auto_apply_description === 'on';
 }
 
 function PT_ExpectedTranscriptVttRelPath($video) {
@@ -818,6 +796,7 @@ function PT_ReconcileStuckTranscriptRecord($video_id, $options = array()) {
     $run_seo = !array_key_exists('run_seo', $options) || !empty($options['run_seo']);
     $needs_seo = trim((string) PT_DbVal($row, 'seo_summary', '')) === '';
     if ($run_seo && $needs_seo && $plain_text !== '') {
+        PT_AiBudgetBegin('reconcile_' . $video_id);
         $summary_result = PT_GenerateTranscriptSeoSummary($video, $plain_text);
         if (!empty($summary_result['ok'])) {
             $seo_upsert = array(
@@ -829,7 +808,11 @@ function PT_ReconcileStuckTranscriptRecord($video_id, $options = array()) {
                 $seo_upsert['key_takeaways'] = $encoded;
             }
             PT_UpsertVideoTranscript($video_id, $seo_upsert);
-            PT_ApplyTranscriptToVideoDescription($video_id, $summary_result['summary']);
+            if (PT_TranscriptAutoApplyDescription()) {
+                PT_ApplyTranscriptToVideoDescription($video_id, $summary_result['summary']);
+            }
+        } else {
+            PT_UpsertVideoTranscript($video_id, array('error_message' => substr((string) $summary_result['error'], 0, 2000)));
         }
     }
 
@@ -869,16 +852,34 @@ function PT_ReconcileStuckTranscriptRecords($options = array()) {
     return $result;
 }
 
-function PT_RegenerateSeoSummaryForVideo($video_id) {
+/**
+ * Regenerate summary + takeaways from the stored transcript (no audio, no Whisper).
+ * Options: force (replace an existing summary), apply_description (also rewrite videos.description; default false).
+ * Refuses to re-bill a video that already has a summary unless force is set.
+ */
+function PT_RegenerateSeoSummaryForVideo($video_id, $options = array()) {
     global $db;
     $video_id = (int) $video_id;
+    $force = !empty($options['force']);
     $row = PT_GetVideoTranscript($video_id);
     $video = $db->arraybuilder()->where('id', $video_id)->getOne(T_VIDEOS);
     if (empty($row) || empty($video) || PT_DbVal($row, 'status') !== 'completed' || empty(PT_DbVal($row, 'plain_text'))) {
         return array('ok' => false, 'error' => 'No completed transcript for this video');
     }
+    $has_summary = trim((string) PT_DbVal($row, 'seo_summary', '')) !== '';
+    $has_takeaways = !empty(PT_ParseKeyTakeaways(PT_DbVal($row, 'key_takeaways', '')));
+    if ($has_summary && $has_takeaways && !$force) {
+        return array('ok' => false, 'skipped' => true, 'error' => 'Summary already exists (use force to regenerate)');
+    }
+    $lock = 'summary_' . $video_id;
+    if (!PT_AiAcquireLock($lock)) {
+        return array('ok' => false, 'skipped' => true, 'error' => 'A summary for this video is already being generated');
+    }
+    PT_AiBudgetBegin('summary_' . $video_id);
     $summary_result = PT_GenerateTranscriptSeoSummary($video, PT_DbVal($row, 'plain_text'));
+    PT_AiReleaseLock($lock);
     if (empty($summary_result['ok'])) {
+        PT_UpsertVideoTranscript($video_id, array('error_message' => substr($summary_result['error'], 0, 2000)));
         return $summary_result;
     }
     $upsert = array(
@@ -890,48 +891,34 @@ function PT_RegenerateSeoSummaryForVideo($video_id) {
         $upsert['key_takeaways'] = $encoded;
     }
     PT_UpsertVideoTranscript($video_id, $upsert);
-    PT_ApplyTranscriptToVideoDescription($video_id, $summary_result['summary']);
+    $applied = false;
+    if (!empty($options['apply_description'])) {
+        $applied = PT_ApplyTranscriptToVideoDescription($video_id, $summary_result['summary']);
+    }
     return array(
         'ok' => true,
         'summary' => $summary_result['summary'],
         'key_takeaways' => !empty($summary_result['key_takeaways']) ? $summary_result['key_takeaways'] : array(),
+        'description_applied' => $applied,
+        'mode' => $summary_result['mode'],
+        'sections' => $summary_result['sections'],
+        'usage' => $summary_result['usage'],
     );
 }
 
 function PT_TestOpenAiConnection() {
     global $pt;
-    $api_key = !empty($pt->config->openai_api_key) ? trim($pt->config->openai_api_key) : '';
-    if ($api_key === '') {
+    if (empty(trim((string) $pt->config->openai_api_key))) {
         return array('ok' => false, 'error' => 'OpenAI API key is empty');
     }
-    $model = !empty($pt->config->openai_model) ? $pt->config->openai_model : 'gpt-4o-mini';
-    $payload = array(
-        'model' => $model,
-        'messages' => array(
-            array('role' => 'user', 'content' => 'Reply with exactly: OK'),
-        ),
-        'max_tokens' => 5,
-    );
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch, array(
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_HTTPHEADER => array(
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $api_key,
-        ),
-        CURLOPT_POSTFIELDS => json_encode($payload),
+    PT_AiBudgetBegin('connection_test', array('max_calls' => 1, 'max_cost' => 0.05));
+    $res = PT_AiChat(array(array('role' => 'user', 'content' => 'Reply with exactly: OK')), 'summary', array(
+        'pass_name' => 'connection_test', 'max_completion_tokens' => 64, 'reasoning_effort' => 'none',
     ));
-    $response = curl_exec($ch);
-    $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($http_code >= 200 && $http_code < 300) {
-        return array('ok' => true, 'message' => 'OpenAI connection successful');
+    if (!empty($res['ok'])) {
+        return array('ok' => true, 'message' => 'OpenAI connection successful (model ' . $res['model'] . ')');
     }
-    $data = json_decode($response, true);
-    $msg = !empty($data['error']['message']) ? $data['error']['message'] : 'HTTP ' . $http_code;
-    return array('ok' => false, 'error' => $msg);
+    return array('ok' => false, 'error' => $res['error']);
 }
 
 function PT_VttToPlainText($vtt_content) {
@@ -1547,11 +1534,13 @@ function PT_RunTranscriptCronBatch($options = array()) {
     }
 
     foreach ($process_queue as $queue_row) {
-        $db->where('id', (int) PT_DbVal($queue_row, 'id'))->update(T_TRANSCRIPT_QUEUE, array('processing' => 1));
+        if (!PT_AiClaimQueueRow(T_TRANSCRIPT_QUEUE, (int) PT_DbVal($queue_row, 'id'))) {
+            continue; // another worker claimed this job first
+        }
         try {
             PT_ProcessTranscriptJob($queue_row);
             $result['processed']++;
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $msg = $e->getMessage();
             PT_TranscriptJobFailed($queue_row, (int) PT_DbVal($queue_row, 'video_id'), $msg, 3);
             $result['errors'][] = $msg;

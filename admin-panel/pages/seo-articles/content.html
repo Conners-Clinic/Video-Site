@@ -174,6 +174,9 @@ $models = PT_LoadSeoPipelineModels();
                         <h6>Models per pass (overrides pipeline-models.json)</h6>
                         <?php
                         $model_labels = array(
+                            'summary' => 'Summary and takeaways',
+                            'summary_sections' => 'Long-transcript sections',
+                            'json_repair' => 'JSON repair',
                             'pass_0' => 'Pass 0 clean',
                             'entity_extraction' => 'Entity extraction',
                             'entity_comparison' => 'Entity comparison',
@@ -185,7 +188,7 @@ $models = PT_LoadSeoPipelineModels();
                         );
                         foreach ($model_labels as $key => $label) {
                             $cfg_key = 'seo_pipeline_model_' . $key;
-                            $val = !empty($pt->config->{$cfg_key}) ? $pt->config->{$cfg_key} : ($models[$key] ?? 'gpt-4o-mini');
+                            $val = !empty($pt->config->{$cfg_key}) ? $pt->config->{$cfg_key} : ($models[$key] ?? '');
                             echo '<div class="form-group"><label>' . htmlspecialchars($label) . '</label>';
                             echo '<input type="text" class="form-control" name="' . htmlspecialchars($cfg_key) . '" value="' . htmlspecialchars($val) . '"></div>';
                         }

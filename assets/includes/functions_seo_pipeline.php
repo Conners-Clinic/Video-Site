@@ -53,33 +53,13 @@ function PT_SeoPipelineWriteJsonFile($relative, $data) {
     return file_put_contents($path, $json) !== false;
 }
 
+/** Stage => default model (from content-pipeline/config/pipeline-models.json; see functions_ai.php). */
 function PT_LoadSeoPipelineModels() {
-    $models = PT_SeoPipelineJsonFile('config/pipeline-models.json');
-    if (empty($models)) {
-        return array(
-            'pass_0' => 'gpt-4o-mini',
-            'entity_extraction' => 'gpt-4o-mini',
-            'entity_comparison' => 'gpt-4o-mini',
-            'entity_auto_merge' => 'deterministic',
-            'entity_review_queue' => 'gpt-4o-mini',
-            'pass_1' => 'gpt-4o-mini',
-            'pass_2' => 'gpt-4o',
-            'pass_3' => 'gpt-4o-mini',
-            'pass_4' => 'gpt-4o',
-            'json_repair' => 'gpt-4o-mini',
-        );
-    }
-    return $models;
+    return PT_AiConfigSection('defaults');
 }
 
 function PT_GetSeoPipelineModel($pass_key) {
-    global $pt;
-    $config_key = 'seo_pipeline_model_' . $pass_key;
-    if (!empty($pt->config->{$config_key})) {
-        return trim($pt->config->{$config_key});
-    }
-    $models = PT_LoadSeoPipelineModels();
-    return !empty($models[$pass_key]) ? $models[$pass_key] : 'gpt-4o-mini';
+    return PT_AiStageModel($pass_key);
 }
 
 function PT_LoadSeoVersions() {
@@ -316,11 +296,12 @@ function PT_SeoArticleToArray($row) {
 function PT_InitializeSeoArticleFromTranscript($video_id) {
     $video_id = (int) $video_id;
     $transcript = PT_GetVideoTranscript($video_id);
-    if (empty($transcript) || $transcript->status !== 'completed' || empty($transcript->plain_text)) {
+    // PT_GetVideoTranscript() returns an array (arraybuilder), so read it with PT_DbVal, not ->
+    if (empty($transcript) || PT_DbVal($transcript, 'status') !== 'completed' || empty(PT_DbVal($transcript, 'plain_text'))) {
         return array('ok' => false, 'error' => 'Video does not have a completed transcript');
     }
     $existing = PT_GetVideoSeoArticle($video_id);
-    $raw = $transcript->plain_text;
+    $raw = PT_DbVal($transcript, 'plain_text');
     $versions = PT_LoadSeoVersions();
     $fields = array(
         'raw_transcript' => $raw,
@@ -387,7 +368,7 @@ function PT_IsVideoInSeoPipelineQueue($video_id) {
     return $db->where('video_id', (int) $video_id)->where('processing', 0)->getValue(T_SEO_PIPELINE_QUEUE, 'COUNT(*)') > 0;
 }
 
-function PT_EnqueueSeoPipeline($video_id, $rerun_from = null) {
+function PT_EnqueueSeoPipeline($video_id, $rerun_from = null, $force = false) {
     global $db;
     $video_id = (int) $video_id;
     if ($video_id < 1) {
@@ -400,6 +381,7 @@ function PT_EnqueueSeoPipeline($video_id, $rerun_from = null) {
     if ($processing > 0) {
         return true;
     }
+    $existing = PT_GetVideoSeoArticle($video_id);
     if ($rerun_from) {
         PT_SeoPipelineClearFromPass($video_id, $rerun_from);
         PT_UpsertVideoSeoArticle($video_id, array(
@@ -407,90 +389,48 @@ function PT_EnqueueSeoPipeline($video_id, $rerun_from = null) {
             'error_message' => '',
             'failed_pass' => null,
         ));
+    } elseif (!empty($existing) && $existing->status === 'complete' && !$force) {
+        // Never re-run (and re-bill) a finished article by accident.
+        return false;
+    } elseif (!empty($existing) && $existing->status === 'failed' && !$force && PT_SeoPipelineResumeStatusForFailedPass($existing->failed_pass)) {
+        // Resume at the failed pass; earlier passes keep their stored output.
+        PT_UpsertVideoSeoArticle($video_id, array(
+            'status' => PT_SeoPipelineResumeStatusForFailedPass($existing->failed_pass),
+            'error_message' => '',
+            'failed_pass' => null,
+            'failed_raw_response' => null,
+        ));
+    } elseif (!empty($existing) && !$force && !in_array($existing->status, array('failed', 'transcript_ready'), true)) {
+        // Partially processed (e.g. stopped between passes): continue from where it is.
+        $revert = PT_SeoPipelineRunningRevertMap();
+        if (isset($revert[$existing->status])) {
+            PT_UpsertVideoSeoArticle($video_id, array('status' => $revert[$existing->status]));
+        }
     } else {
         $init = PT_InitializeSeoArticleFromTranscript($video_id);
         if (empty($init['ok'])) {
             return false;
         }
     }
-    return $db->insert(T_SEO_PIPELINE_QUEUE, array(
+    $inserted = $db->insert(T_SEO_PIPELINE_QUEUE, array(
         'video_id' => $video_id,
         'processing' => 0,
         'rerun_from' => $rerun_from,
         'priority' => 0,
         'created_at' => time(),
     ));
+    if ($inserted) {
+        // Two simultaneous clicks can both pass the checks above; the older row wins, the newer one removes itself.
+        $oldest = $db->where('video_id', $video_id)->orderBy('id', 'ASC')->getOne(T_SEO_PIPELINE_QUEUE);
+        if (!empty($oldest) && (int) PT_DbVal($oldest, 'id') !== (int) $inserted) {
+            $db->where('id', (int) $inserted)->delete(T_SEO_PIPELINE_QUEUE);
+        }
+    }
+    return $inserted;
 }
 
 function PT_LogSeoPipelineCall($data) {
-    global $db;
-    $row = array(
-        'video_id' => (int) ($data['video_id'] ?? 0),
-        'pass_name' => !empty($data['pass_name']) ? substr($data['pass_name'], 0, 64) : '',
-        'model_used' => !empty($data['model_used']) ? substr($data['model_used'], 0, 64) : '',
-        'input_tokens' => isset($data['input_tokens']) ? (int) $data['input_tokens'] : null,
-        'output_tokens' => isset($data['output_tokens']) ? (int) $data['output_tokens'] : null,
-        'started_at' => (int) ($data['started_at'] ?? time()),
-        'completed_at' => !empty($data['completed_at']) ? (int) $data['completed_at'] : time(),
-        'status' => !empty($data['status']) ? $data['status'] : 'unknown',
-        'error_message' => !empty($data['error_message']) ? substr($data['error_message'], 0, 5000) : null,
-        'raw_response' => !empty($data['raw_response']) ? $data['raw_response'] : null,
-    );
-    return $db->insert(T_SEO_PIPELINE_LOGS, $row);
-}
-
-function PT_SeoOpenAiChat($messages, $model, $options = array()) {
-    global $pt;
-    $api_key = !empty($pt->config->openai_api_key) ? trim($pt->config->openai_api_key) : '';
-    if ($api_key === '') {
-        return array('ok' => false, 'content' => '', 'error' => 'OpenAI API key is not configured');
-    }
-    $temperature = isset($options['temperature']) ? (float) $options['temperature'] : 0.4;
-    $max_tokens = isset($options['max_tokens']) ? (int) $options['max_tokens'] : 16000;
-    $timeout = isset($options['timeout']) ? (int) $options['timeout'] : 180;
-    $payload = array(
-        'model' => $model,
-        'messages' => $messages,
-        'temperature' => $temperature,
-        'max_tokens' => $max_tokens,
-    );
-    if (!empty($options['response_format_json'])) {
-        $payload['response_format'] = array('type' => 'json_object');
-    }
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch, array(
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_HTTPHEADER => array(
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $api_key,
-        ),
-        CURLOPT_POSTFIELDS => json_encode($payload),
-    ));
-    $response = curl_exec($ch);
-    $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
-    if ($response === false) {
-        return array('ok' => false, 'content' => '', 'error' => 'OpenAI request failed: ' . $curl_error, 'raw' => '');
-    }
-    $data = json_decode($response, true);
-    if ($http_code < 200 || $http_code >= 300) {
-        $msg = !empty($data['error']['message']) ? $data['error']['message'] : substr($response, 0, 500);
-        return array('ok' => false, 'content' => '', 'error' => 'OpenAI HTTP ' . $http_code . ': ' . $msg, 'raw' => $response);
-    }
-    $content = '';
-    if (!empty($data['choices'][0]['message']['content'])) {
-        $content = trim($data['choices'][0]['message']['content']);
-    }
-    return array(
-        'ok' => $content !== '',
-        'content' => $content,
-        'error' => $content === '' ? 'OpenAI returned empty content' : '',
-        'raw' => $response,
-        'usage' => !empty($data['usage']) ? $data['usage'] : array(),
-    );
+    return PT_AiLogCall($data);
 }
 
 function PT_StripMarkdownJsonFence($text) {
@@ -518,47 +458,43 @@ function PT_ParseJsonFromAiResponse($text) {
     return null;
 }
 
-function PT_SeoRepairJson($invalid_text, $pass_name) {
-    $model = PT_GetSeoPipelineModel('json_repair');
-    $prompt = 'The following output was supposed to be valid JSON for pass "' . $pass_name . '" but failed to parse. Return ONLY valid JSON with the same structure and data, no markdown fences, no commentary.';
-    $result = PT_SeoOpenAiChat(array(
+function PT_SeoRepairJson($invalid_text, $pass_name, $video_id = 0) {
+    $prompt = 'The following output was supposed to be valid JSON for pass "' . $pass_name . '" but failed to parse. Return ONLY valid JSON with the same structure and data, no markdown fences, no commentary. Do not add, remove or change any information.';
+    $result = PT_AiChat(array(
         array('role' => 'system', 'content' => 'You fix malformed JSON. Output JSON only.'),
-        array('role' => 'user', 'content' => $prompt . "\n\n" . substr($invalid_text, 0, 120000)),
-    ), $model, array('temperature' => 0, 'max_tokens' => 16000, 'response_format_json' => true));
+        array('role' => 'user', 'content' => $prompt . "\n\n" . $invalid_text),
+    ), 'json_repair', array('json' => true, 'video_id' => $video_id, 'pass_name' => $pass_name . '_json_repair'));
     if (empty($result['ok'])) {
         return null;
     }
     return PT_ParseJsonFromAiResponse($result['content']);
 }
 
-function PT_SeoValidateJsonPass($raw_content, $pass_name, $video_id, $model) {
+function PT_SeoValidateJsonPass($raw_content, $pass_name, $video_id) {
     $parsed = PT_ParseJsonFromAiResponse($raw_content);
     if (is_array($parsed)) {
         return array('ok' => true, 'data' => $parsed, 'raw' => $raw_content);
     }
-    $repaired = PT_SeoRepairJson($raw_content, $pass_name);
+    $repaired = PT_SeoRepairJson($raw_content, $pass_name, $video_id);
     if (is_array($repaired)) {
-        PT_LogSeoPipelineCall(array(
-            'video_id' => $video_id,
-            'pass_name' => $pass_name . '_json_repair',
-            'model_used' => PT_GetSeoPipelineModel('json_repair'),
-            'status' => 'success',
-            'started_at' => time(),
-            'completed_at' => time(),
-        ));
         return array('ok' => true, 'data' => $repaired, 'raw' => $raw_content, 'repaired' => true);
     }
     return array('ok' => false, 'data' => null, 'raw' => $raw_content, 'error' => 'Invalid JSON after repair attempt');
 }
 
-function PT_ComputeTranscriptQuality($raw, $cleaned) {
+function PT_SeoWordCount($text) {
+    $text = trim((string) $text);
+    return $text === '' ? 0 : count(preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY));
+}
+
+/**
+ * Quality record for a cleaned transcript. $pass0 is the chunk report from PT_SeoPipelineRunPass0.
+ */
+function PT_ComputeTranscriptQuality($raw, $cleaned, $pass0 = array()) {
     $raw = trim($raw);
     $cleaned = trim($cleaned);
-    $raw_words = str_word_count($raw);
-    $clean_words = str_word_count($cleaned);
-    $diff = abs($raw_words - $clean_words);
-    $similar = 0;
-    similar_text(mb_substr($raw, 0, 5000), mb_substr($cleaned, 0, 5000), $similar);
+    $raw_words = PT_SeoWordCount($raw);
+    $clean_words = PT_SeoWordCount($cleaned);
     $brand_corrections = 0;
     $brand = PT_LoadBrandStandards();
     if (!empty($brand['brand_names'])) {
@@ -568,14 +504,102 @@ function PT_ComputeTranscriptQuality($raw, $cleaned) {
             }
         }
     }
-    $score = (int) round(min(100, max(50, $similar)));
+    $chunks = !empty($pass0['chunks']) ? (int) $pass0['chunks'] : 1;
+    $fallbacks = !empty($pass0['fallback_chunks']) ? count($pass0['fallback_chunks']) : 0;
+    $ratio = $raw_words > 0 ? round($clean_words / $raw_words, 3) : 0;
+    $score = 100 - (int) round(60 * ($fallbacks / max(1, $chunks)));
+    $pass0_cfg = PT_AiConfigSection('pass_0');
+    if ($raw_words > 0 && (($ratio < (float) (isset($pass0_cfg['min_word_ratio']) ? $pass0_cfg['min_word_ratio'] : 0.6)) || $ratio > 1.3)) {
+        $score -= 20;
+    }
     return array(
-        'score' => $score,
-        'issues_found' => $diff,
+        'score' => max(0, $score),
+        'raw_words' => $raw_words,
+        'cleaned_words' => $clean_words,
+        'word_ratio' => $ratio,
+        'issues_found' => abs($raw_words - $clean_words),
         'brand_corrections' => $brand_corrections,
         'entity_corrections' => 0,
         'speaker_corrections' => 0,
+        'chunks' => $chunks,
+        'fallback_chunks' => !empty($pass0['fallback_chunks']) ? $pass0['fallback_chunks'] : array(),
+        'numeric_flags' => !empty($pass0['numeric_flags']) ? $pass0['numeric_flags'] : array(),
+        'warnings' => !empty($pass0['warnings']) ? $pass0['warnings'] : array(),
     );
+}
+
+/**
+ * Pass 0 over the COMPLETE transcript. Splits on sentence boundaries into token-sized chunks (no overlap, so
+ * nothing is duplicated), cleans each chunk, and verifies every chunk before accepting it:
+ *  - the response was not truncated (PT_AiChat fails on finish_reason=length),
+ *  - word count stays within the configured ratio of the raw chunk (nothing silently dropped),
+ *  - every number (dose, lab value, percentage, year) in the raw chunk is present, and none invented.
+ * A chunk that fails is retried once with the specific problem named; if it still fails the RAW chunk is kept
+ * (so no content is lost and no unverified edit lands) and the chunk is flagged in transcript_quality.
+ */
+function PT_SeoPipelineRunPass0($video_id, $article) {
+    $raw = (string) $article->raw_transcript;
+    $cfg = array_merge(array('chunk_tokens' => 5000, 'min_word_ratio' => 0.6, 'max_word_ratio' => 1.15), PT_AiConfigSection('pass_0'));
+    $template = PT_LoadPromptTemplate('pass-0-clean-transcript');
+    if ($template === '') {
+        return array('ok' => false, 'error' => 'Prompt template not found: pass-0-clean-transcript');
+    }
+    $chunks = PT_AiSplitText($raw, (int) $cfg['chunk_tokens'], 0);
+    if (empty($chunks)) {
+        return array('ok' => false, 'error' => 'Raw transcript is empty');
+    }
+    if (!PT_AiChunksCoverText($raw, $chunks, (int) $cfg['chunk_tokens'])) {
+        return array('ok' => false, 'error' => 'Internal error: Pass 0 split did not cover the whole transcript');
+    }
+    $n = count($chunks);
+    $report = array('chunks' => $n, 'fallback_chunks' => array(), 'numeric_flags' => array(), 'warnings' => array());
+    $parts = array();
+    $vars = PT_SeoPipelineBuildVars($article);
+    foreach ($chunks as $i => $chunk) {
+        $vars['PASTE_TRANSCRIPT'] = $chunk['text'];
+        $base_prompt = PT_ReplacePromptPlaceholders($template, $vars);
+        $note = $n > 1 ? 'NOTE: This is part ' . ($i + 1) . ' of ' . $n . ' of one continuous transcript. Clean ONLY this part. Do not add an introduction, conclusion or summary, and do not repeat content from other parts.' . "\n\n" : '';
+        $raw_words = PT_SeoWordCount($chunk['text']);
+        $accepted = null;
+        $problem = '';
+        for ($try = 1; $try <= 2; $try++) {
+            $extra = ($try === 2 && $problem !== '')
+                ? "\n\nIMPORTANT: your previous attempt was rejected: " . $problem . ' Keep every sentence and every number, dose, lab value and percentage exactly as spoken. Only remove filler words and fix obvious spelling.'
+                : '';
+            $res = PT_AiChat(array(array('role' => 'user', 'content' => $note . $base_prompt . $extra)), 'pass_0', array(
+                'video_id' => $video_id, 'pass_name' => 'pass_0_chunk_' . ($i + 1),
+            ));
+            if (empty($res['ok'])) {
+                return array('ok' => false, 'error' => 'Pass 0 part ' . ($i + 1) . ' of ' . $n . ': ' . $res['error'], 'content' => $res['content'], 'raw' => $res['raw'], 'truncated' => !empty($res['truncated']));
+            }
+            $clean = $res['content'];
+            $ratio = $raw_words > 0 ? PT_SeoWordCount($clean) / $raw_words : 1;
+            $fid = PT_AiNumericFidelity($chunk['text'], $clean);
+            $problem = '';
+            if ($ratio < (float) $cfg['min_word_ratio']) {
+                $problem = 'too much content was dropped (' . round($ratio * 100) . '% of the words kept).';
+            } elseif ($ratio > (float) $cfg['max_word_ratio']) {
+                $problem = 'content was added (' . round($ratio * 100) . '% of the original length).';
+            } elseif (!$fid['ok']) {
+                $problem = 'numbers changed (missing: ' . implode(', ', array_slice($fid['missing'], 0, 8)) . '; added: ' . implode(', ', array_slice($fid['added'], 0, 8)) . ').';
+            }
+            if ($problem === '') {
+                $accepted = $clean;
+                break;
+            }
+            $last_fid = $fid;
+        }
+        if ($accepted === null) {
+            $accepted = $chunk['text']; // keep the verbatim chunk rather than an unverified edit
+            $report['fallback_chunks'][] = $i + 1;
+            $report['warnings'][] = 'Part ' . ($i + 1) . ' of ' . $n . ' kept as raw text: ' . $problem;
+            if (!empty($last_fid) && !$last_fid['ok']) {
+                $report['numeric_flags'][] = array('chunk' => $i + 1, 'missing' => array_slice($last_fid['missing'], 0, 20), 'added' => array_slice($last_fid['added'], 0, 20));
+            }
+        }
+        $parts[] = $accepted;
+    }
+    return array('ok' => true, 'content' => implode("\n\n", $parts), 'report' => $report);
 }
 
 function PT_ExtractArticleMetadataFromMarkdown($markdown) {
@@ -769,43 +793,22 @@ function PT_SeoPipelineBuildVars($article) {
     );
 }
 
-function PT_SeoPipelineRunAiPass($video_id, $pass_name, $prompt_slug, $model_key, $article, $json_output = false, $options = array()) {
+function PT_SeoPipelineRunAiPass($video_id, $pass_name, $prompt_slug, $stage, $article, $json_output = false) {
     $template = PT_LoadPromptTemplate($prompt_slug);
     if ($template === '') {
         return array('ok' => false, 'error' => 'Prompt template not found: ' . $prompt_slug);
     }
-    $vars = PT_SeoPipelineBuildVars($article);
-    $prompt = PT_ReplacePromptPlaceholders($template, $vars);
-    $model = PT_GetSeoPipelineModel($model_key);
-    $started = time();
-    $messages = array(array('role' => 'user', 'content' => $prompt));
-    $ai_opts = array(
-        'temperature' => !empty($options['temperature']) ? $options['temperature'] : 0.4,
-        'max_tokens' => !empty($options['max_tokens']) ? $options['max_tokens'] : 16000,
-        'timeout' => !empty($options['timeout']) ? $options['timeout'] : 300,
-        'response_format_json' => $json_output,
-    );
-    $result = PT_SeoOpenAiChat($messages, $model, $ai_opts);
-    $usage = !empty($result['usage']) ? $result['usage'] : array();
-    PT_LogSeoPipelineCall(array(
-        'video_id' => $video_id,
-        'pass_name' => $pass_name,
-        'model_used' => $model,
-        'input_tokens' => !empty($usage['prompt_tokens']) ? (int) $usage['prompt_tokens'] : null,
-        'output_tokens' => !empty($usage['completion_tokens']) ? (int) $usage['completion_tokens'] : null,
-        'started_at' => $started,
-        'completed_at' => time(),
-        'status' => !empty($result['ok']) ? 'success' : 'failed',
-        'error_message' => !empty($result['error']) ? $result['error'] : null,
-        'raw_response' => empty($result['ok']) ? (!empty($result['raw']) ? $result['raw'] : $result['content']) : null,
+    $prompt = PT_ReplacePromptPlaceholders($template, PT_SeoPipelineBuildVars($article));
+    $result = PT_AiChat(array(array('role' => 'user', 'content' => $prompt)), $stage, array(
+        'json' => $json_output, 'video_id' => $video_id, 'pass_name' => $pass_name,
     ));
     if (empty($result['ok'])) {
-        return $result;
+        return array('ok' => false, 'error' => $result['error'], 'content' => $result['content'], 'raw' => $result['raw'], 'truncated' => !empty($result['truncated']));
     }
     if ($json_output) {
-        $validated = PT_SeoValidateJsonPass($result['content'], $pass_name, $video_id, $model);
+        $validated = PT_SeoValidateJsonPass($result['content'], $pass_name, $video_id);
         if (empty($validated['ok'])) {
-            return array('ok' => false, 'error' => $validated['error'], 'content' => $result['content'], 'raw' => $result['raw']);
+            return array('ok' => false, 'error' => $validated['error'], 'content' => $result['content'], 'raw' => $result['content']);
         }
         return array('ok' => true, 'data' => $validated['data'], 'content' => $result['content']);
     }
@@ -836,9 +839,63 @@ function PT_SeoPipelineNextStatus($current) {
     return !empty($flow[$current]) ? $flow[$current] : null;
 }
 
-function PT_SeoPipelineRunSingleStep($video_id) {
+/** Status to fall back to when a step died mid-flight and left "*_running" behind. */
+function PT_SeoPipelineRunningRevertMap() {
+    return array(
+        'pass_0_running' => 'transcript_ready',
+        'entities_extracting' => 'pass_0_complete',
+        'entities_comparing' => 'entities_extracted',
+        'pass_1_running' => 'entity_review_queue_created',
+        'pass_2_running' => 'pass_1_complete',
+        'pass_3_running' => 'pass_2_complete',
+        'pass_4_running' => 'pass_3_complete',
+    );
+}
+
+/** Status at which a failed run resumes (the failed pass itself is re-run; earlier passes are NOT re-billed). */
+function PT_SeoPipelineResumeStatusForFailedPass($failed_pass) {
+    $map = array(
+        'pass_0' => 'transcript_ready',
+        'entity_extraction' => 'pass_0_complete',
+        'entity_comparison' => 'entities_extracted',
+        'entity_review_queue' => 'entity_library_updated',
+        'pass_1' => 'entity_review_queue_created',
+        'pass_2' => 'pass_1_complete',
+        'pass_3' => 'pass_2_complete',
+        'pass_4' => 'pass_3_complete',
+    );
+    return !empty($map[$failed_pass]) ? $map[$failed_pass] : null;
+}
+
+/**
+ * Run the next step for a video. Only one worker may run a video at a time (named DB lock), so a cron job
+ * and an admin "run step" click can never double-bill the same pass.
+ */
+function PT_SeoPipelineRunSingleStep($video_id, $options = array()) {
+    $video_id = (int) $video_id;
+    $lock = 'seo_pipeline_' . $video_id;
+    if (!PT_AiAcquireLock($lock)) {
+        return array('ok' => false, 'error' => 'Another worker is already processing this video', 'locked' => true);
+    }
+    try {
+        return PT_SeoPipelineRunSingleStepLocked($video_id, $options);
+    } finally {
+        PT_AiReleaseLock($lock);
+    }
+}
+
+function PT_SeoPipelineRunSingleStepLocked($video_id, $options = array()) {
     $video_id = (int) $video_id;
     $article = PT_GetVideoSeoArticle($video_id);
+    if (!empty($article)) {
+        // We hold the lock, so a "*_running" status can only be left over from a crashed worker.
+        $revert = PT_SeoPipelineRunningRevertMap();
+        $age = time() - (int) $article->updated_at;
+        if (isset($revert[$article->status]) && (!empty($options['recover_stale']) || $age > 900)) {
+            PT_UpsertVideoSeoArticle($video_id, array('status' => $revert[$article->status]));
+            $article = PT_GetVideoSeoArticle($video_id);
+        }
+    }
     if (empty($article)) {
         $init = PT_InitializeSeoArticleFromTranscript($video_id);
         if (empty($init['ok'])) {
@@ -859,13 +916,13 @@ function PT_SeoPipelineRunSingleStep($video_id) {
     switch ($status) {
         case 'transcript_ready':
             PT_UpsertVideoSeoArticle($video_id, array('status' => 'pass_0_running'));
-            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_0', 'pass-0-clean-transcript', 'pass_0', $article, false, array('max_tokens' => 16000, 'timeout' => 300));
+            $result = PT_SeoPipelineRunPass0($video_id, $article);
             if (empty($result['ok'])) {
                 PT_SeoPipelineMarkFailed($video_id, 'pass_0', $result['error'], !empty($result['raw']) ? $result['raw'] : (!empty($result['content']) ? $result['content'] : null));
                 return $result;
             }
             $cleaned = $result['content'];
-            $quality = PT_ComputeTranscriptQuality($article->raw_transcript, $cleaned);
+            $quality = PT_ComputeTranscriptQuality($article->raw_transcript, $cleaned, $result['report']);
             PT_UpsertVideoSeoArticle($video_id, array(
                 'cleaned_transcript' => $cleaned,
                 'transcript_quality' => $quality,
@@ -931,7 +988,7 @@ function PT_SeoPipelineRunSingleStep($video_id) {
         case 'entity_review_queue_created':
             PT_UpsertVideoSeoArticle($video_id, array('status' => 'pass_1_running'));
             $article = PT_GetVideoSeoArticle($video_id);
-            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_1', 'pass-1-seo-blueprint', 'pass_1', $article, false, array('max_tokens' => 12000));
+            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_1', 'pass-1-seo-blueprint', 'pass_1', $article, false);
             if (empty($result['ok'])) {
                 PT_SeoPipelineMarkFailed($video_id, 'pass_1', $result['error'], !empty($result['content']) ? $result['content'] : null);
                 return $result;
@@ -945,7 +1002,7 @@ function PT_SeoPipelineRunSingleStep($video_id) {
         case 'pass_1_complete':
             PT_UpsertVideoSeoArticle($video_id, array('status' => 'pass_2_running'));
             $article = PT_GetVideoSeoArticle($video_id);
-            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_2', 'pass-2-blog-article', 'pass_2', $article, false, array('max_tokens' => 16000, 'timeout' => 600, 'temperature' => 0.6));
+            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_2', 'pass-2-blog-article', 'pass_2', $article, false);
             if (empty($result['ok'])) {
                 PT_SeoPipelineMarkFailed($video_id, 'pass_2', $result['error'], !empty($result['content']) ? $result['content'] : null);
                 return $result;
@@ -964,7 +1021,7 @@ function PT_SeoPipelineRunSingleStep($video_id) {
         case 'pass_2_complete':
             PT_UpsertVideoSeoArticle($video_id, array('status' => 'pass_3_running'));
             $article = PT_GetVideoSeoArticle($video_id);
-            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_3', 'pass-3-seo-audit', 'pass_3', $article, true, array('max_tokens' => 12000));
+            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_3', 'pass-3-seo-audit', 'pass_3', $article, true);
             if (empty($result['ok'])) {
                 PT_SeoPipelineMarkFailed($video_id, 'pass_3', $result['error'], !empty($result['content']) ? $result['content'] : null);
                 return $result;
@@ -978,7 +1035,7 @@ function PT_SeoPipelineRunSingleStep($video_id) {
         case 'pass_3_complete':
             PT_UpsertVideoSeoArticle($video_id, array('status' => 'pass_4_running'));
             $article = PT_GetVideoSeoArticle($video_id);
-            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_4', 'pass-4-final-revision', 'pass_4', $article, false, array('max_tokens' => 16000, 'timeout' => 600, 'temperature' => 0.5));
+            $result = PT_SeoPipelineRunAiPass($video_id, 'pass_4', 'pass-4-final-revision', 'pass_4', $article, false);
             if (empty($result['ok'])) {
                 PT_SeoPipelineMarkFailed($video_id, 'pass_4', $result['error'], !empty($result['content']) ? $result['content'] : null);
                 return $result;
@@ -1003,38 +1060,67 @@ function PT_SeoPipelineRunSingleStep($video_id) {
             $next = PT_SeoPipelineNextStatus($status);
             if ($next) {
                 PT_UpsertVideoSeoArticle($video_id, array('status' => str_replace('_running', '', $next)));
-                return PT_SeoPipelineRunSingleStep($video_id);
+                return PT_SeoPipelineRunSingleStepLocked($video_id, $options);
             }
             return array('ok' => false, 'error' => 'Unknown pipeline status: ' . $status);
     }
 }
 
+/** Put jobs back that were claimed but never finished (crashed worker). Needs migration 2032 (claimed_at). */
+function PT_SeoResetStaleQueueJobs($max_age_seconds = 2700) {
+    global $db;
+    if (!PT_AiColumnExists(T_SEO_PIPELINE_QUEUE, 'claimed_at')) {
+        return 0;
+    }
+    $cutoff = time() - (int) $max_age_seconds;
+    $stale = $db->where('processing', 1)->where('claimed_at', $cutoff, '<')->get(T_SEO_PIPELINE_QUEUE);
+    $n = 0;
+    if (!empty($stale)) {
+        foreach ($stale as $row) {
+            $db->where('id', (int) PT_DbVal($row, 'id'))->update(T_SEO_PIPELINE_QUEUE, array('processing' => 0));
+            $n++;
+        }
+    }
+    return $n;
+}
+
 function PT_ProcessSeoPipelineQueueJob($queue_row) {
     global $db, $pt;
+    $queue_id = (int) PT_DbVal($queue_row, 'id');
     if (!empty($pt->config->seo_pipeline_system) && $pt->config->seo_pipeline_system !== 'on') {
-        $db->where('id', (int) $queue_row->id)->delete(T_SEO_PIPELINE_QUEUE);
+        $db->where('id', $queue_id)->delete(T_SEO_PIPELINE_QUEUE);
         return;
     }
-    $video_id = (int) $queue_row->video_id;
-    $db->where('id', (int) $queue_row->id)->update(T_SEO_PIPELINE_QUEUE, array('processing' => 1));
+    if (!PT_AiClaimQueueRow(T_SEO_PIPELINE_QUEUE, $queue_id)) {
+        return; // another worker owns this job
+    }
+    @set_time_limit(0);
+    $video_id = (int) PT_DbVal($queue_row, 'video_id');
+    PT_AiBudgetBegin('seo_' . $video_id);
     $max_steps = 20;
     $steps = 0;
     $done = false;
-    while ($steps < $max_steps && !$done) {
-        $result = PT_SeoPipelineRunSingleStep($video_id);
-        $steps++;
-        if (empty($result['ok'])) {
-            break;
+    $options = array('recover_stale' => true); // we own the job, so any "*_running" status is leftover
+    try {
+        while ($steps < $max_steps && !$done) {
+            $result = PT_SeoPipelineRunSingleStep($video_id, $options);
+            $options = array();
+            $steps++;
+            if (empty($result['ok'])) {
+                break;
+            }
+            if (!empty($result['done'])) {
+                $done = true;
+            }
+            $article = PT_GetVideoSeoArticle($video_id);
+            if (!empty($article) && in_array($article->status, array('complete', 'failed'), true)) {
+                $done = true;
+            }
         }
-        if (!empty($result['done'])) {
-            $done = true;
-        }
-        $article = PT_GetVideoSeoArticle($video_id);
-        if (!empty($article) && in_array($article->status, array('complete', 'failed'), true)) {
-            $done = true;
-        }
+    } catch (Throwable $e) {
+        PT_SeoPipelineMarkFailed($video_id, 'worker', $e->getMessage());
     }
-    $db->where('id', (int) $queue_row->id)->delete(T_SEO_PIPELINE_QUEUE);
+    $db->where('id', $queue_id)->delete(T_SEO_PIPELINE_QUEUE);
 }
 
 function PT_GetSeoPipelineQueueCount() {
@@ -1131,5 +1217,6 @@ function PT_GetDisplayTranscriptForVideo($video_id) {
         return $seo->cleaned_transcript;
     }
     $row = PT_GetVideoTranscript($video_id);
-    return (!empty($row) && !empty($row->plain_text)) ? $row->plain_text : '';
+    $plain = PT_DbVal($row, 'plain_text'); // PT_GetVideoTranscript() returns an array
+    return !empty($plain) ? $plain : '';
 }

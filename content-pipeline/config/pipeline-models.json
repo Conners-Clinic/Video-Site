@@ -1,12 +1,79 @@
 {
-  "pass_0": "gpt-4o-mini",
-  "entity_extraction": "gpt-4o-mini",
-  "entity_comparison": "gpt-4o-mini",
-  "entity_auto_merge": "deterministic",
-  "entity_review_queue": "gpt-4o-mini",
-  "pass_1": "gpt-4o-mini",
-  "pass_2": "gpt-4o",
-  "pass_3": "gpt-4o-mini",
-  "pass_4": "gpt-4o",
-  "json_repair": "gpt-4o-mini"
+  "schema": 2,
+  "_notes": "Single source of truth for AI model names, per-stage settings, pricing and limits. Admin overrides (config keys seo_pipeline_model_<stage>) win over 'defaults'. Prices are USD per 1M tokens (OpenAI list prices; update here when they change).",
+  "defaults": {
+    "summary": "gpt-6-luna",
+    "summary_sections": "gpt-6-luna",
+    "pass_0": "gpt-6-luna",
+    "entity_extraction": "gpt-6-luna",
+    "entity_comparison": "gpt-6-luna",
+    "entity_auto_merge": "deterministic",
+    "entity_review_queue": "gpt-6-luna",
+    "pass_1": "gpt-6-luna",
+    "pass_2": "gpt-6.1-terra",
+    "pass_3": "gpt-6-luna",
+    "pass_4": "gpt-6.1-terra",
+    "json_repair": "gpt-6-luna"
+  },
+  "stage_settings": {
+    "summary":             { "reasoning_effort": "low",  "max_completion_tokens": 12000, "timeout": 180 },
+    "summary_sections":    { "reasoning_effort": "low",  "max_completion_tokens": 12000, "timeout": 300 },
+    "pass_0":              { "reasoning_effort": "none", "max_completion_tokens": 16000, "timeout": 300 },
+    "entity_extraction":   { "reasoning_effort": "low",  "max_completion_tokens": 20000, "timeout": 300 },
+    "entity_comparison":   { "reasoning_effort": "low",  "max_completion_tokens": 20000, "timeout": 300 },
+    "entity_review_queue": { "reasoning_effort": "none", "max_completion_tokens": 16000, "timeout": 300 },
+    "pass_1":              { "reasoning_effort": "low",  "max_completion_tokens": 20000, "timeout": 300 },
+    "pass_2":              { "reasoning_effort": "low",  "max_completion_tokens": 40000, "timeout": 600, "temperature": 0.6 },
+    "pass_3":              { "reasoning_effort": "low",  "max_completion_tokens": 20000, "timeout": 300 },
+    "pass_4":              { "reasoning_effort": "low",  "max_completion_tokens": 40000, "timeout": 600, "temperature": 0.5 },
+    "json_repair":         { "reasoning_effort": "none", "max_completion_tokens": 20000, "timeout": 180, "temperature": 0 }
+  },
+  "models": {
+    "gpt-6-luna": {
+      "family": "gpt-6", "reasoning": true, "token_param": "max_completion_tokens", "temperature": false,
+      "context_window": 1050000, "max_output": 128000,
+      "price_input": 0.10, "price_cached_input": 0.01, "price_output": 0.50,
+      "long_context_threshold": 272000, "long_context_input_multiplier": 2.0, "long_context_output_multiplier": 1.5
+    },
+    "gpt-6.1-terra": {
+      "family": "gpt-6", "reasoning": true, "token_param": "max_completion_tokens", "temperature": false,
+      "context_window": 1050000, "max_output": 128000,
+      "price_input": 1.00, "price_cached_input": 0.05, "price_output": 5.00,
+      "long_context_threshold": 272000, "long_context_input_multiplier": 2.0, "long_context_output_multiplier": 1.5
+    },
+    "gpt-4o-mini": {
+      "family": "gpt-4", "reasoning": false, "token_param": "max_tokens", "temperature": true,
+      "context_window": 128000, "max_output": 16384,
+      "price_input": 0.15, "price_cached_input": 0.075, "price_output": 0.60
+    },
+    "gpt-4o": {
+      "family": "gpt-4", "reasoning": false, "token_param": "max_tokens", "temperature": true,
+      "context_window": 128000, "max_output": 16384,
+      "price_input": 2.50, "price_cached_input": 1.25, "price_output": 10.00
+    }
+  },
+  "unknown_model": {
+    "family": "unknown", "reasoning": true, "token_param": "max_completion_tokens", "temperature": false,
+    "context_window": 128000, "max_output": 16384,
+    "price_input": 2.50, "price_cached_input": 2.50, "price_output": 10.00
+  },
+  "limits": {
+    "max_cost_usd_per_job": 2.00,
+    "max_calls_per_job": 80,
+    "max_retries": 2,
+    "retry_base_delay_seconds": 2,
+    "summary_max_transcript_tokens": 600000
+  },
+  "summary": {
+    "single_pass_max_input_tokens": 150000,
+    "chunk_tokens": 40000,
+    "chunk_overlap_tokens": 1000,
+    "reduce_max_input_tokens": 60000,
+    "max_reduce_depth": 4
+  },
+  "pass_0": {
+    "chunk_tokens": 5000,
+    "min_word_ratio": 0.6,
+    "max_word_ratio": 1.15
+  }
 }
