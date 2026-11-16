@@ -9,6 +9,7 @@ if (empty($pt->config->seo_pipeline_system) || $pt->config->seo_pipeline_system 
 
 $db->where('name', 'seo_pipeline_cron_last_run')->update(T_CONFIG, array('value' => time()));
 
+PT_SeoResetStaleQueueJobs();
 $queue_count = PT_GetSeoPipelineQueueCount();
 $processing = $db->where('processing', 1)->getValue(T_SEO_PIPELINE_QUEUE, 'COUNT(*)');
 $max_concurrent = !empty($pt->config->seo_pipeline_max_concurrent) ? (int) $pt->config->seo_pipeline_max_concurrent : 1;
@@ -50,7 +51,7 @@ if (is_callable('litespeed_finish_request')) {
 foreach ($process_queue as $queue_row) {
     try {
         PT_ProcessSeoPipelineQueueJob($queue_row);
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         PT_SeoPipelineMarkFailed((int) $queue_row->video_id, 'cron', $e->getMessage());
         $db->where('id', (int) $queue_row->id)->delete(T_SEO_PIPELINE_QUEUE);
     }

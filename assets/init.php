@@ -18,6 +18,8 @@ require('assets/includes/functions_general.php');
 require('assets/includes/tables.php');
 require('assets/includes/functions_one.php');
 require('assets/includes/functions_transcribe.php');
+require('assets/includes/functions_ai.php');
+require('assets/includes/functions_ai_summary.php');
 require('assets/includes/functions_transcribe_monitor.php');
 require('assets/includes/functions_seo_pipeline.php');
 

@@ -91,8 +91,20 @@
                             <input type="password" class="form-control" name="openai_api_key" value="<?php echo htmlspecialchars($pt->config->openai_api_key ?? ''); ?>" autocomplete="off">
                         </div>
                         <div class="form-group">
-                            <label>OpenAI model</label>
-                            <input type="text" class="form-control" name="openai_model" value="<?php echo htmlspecialchars($pt->config->openai_model ?? 'gpt-4o-mini'); ?>">
+                            <label>Summary &amp; takeaways model</label>
+                            <input type="text" class="form-control" name="seo_pipeline_model_summary" value="<?php echo htmlspecialchars(PT_AiStageModel('summary')); ?>">
+                            <small class="text-muted">Default comes from content-pipeline/config/pipeline-models.json. Other stages are set under SEO Articles &rarr; Settings. The old single "OpenAI model" setting is no longer used.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Long-transcript section model</label>
+                            <input type="text" class="form-control" name="seo_pipeline_model_summary_sections" value="<?php echo htmlspecialchars(PT_AiStageModel('summary_sections')); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Rewrite video descriptions automatically after transcription?</label>
+                            <select class="form-control" name="transcript_auto_apply_description">
+                                <option value="off"<?php echo (($pt->config->transcript_auto_apply_description ?? 'off') === 'on') ? '' : ' selected'; ?>>Off (recommended): only via "Apply descriptions"</option>
+                                <option value="on"<?php echo (($pt->config->transcript_auto_apply_description ?? 'off') === 'on') ? ' selected' : ''; ?>>On</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>Custom system prompt (optional)</label>
@@ -243,6 +255,14 @@
                     <button type="button" class="btn btn-warning" id="regenerate-seo-btn">Generate SEO summaries</button>
                     <button type="button" class="btn btn-info m-l-10" id="apply-desc-btn">Apply descriptions (has summary)</button>
                     <p class="text-muted m-t-10">Use after transcripts are completed. Requires OpenAI key. Does not re-run Whisper.</p>
+                    <hr>
+                    <label for="regen_one_video_id">Regenerate ONE video's summary (internal video ID)</label>
+                    <div class="form-inline">
+                        <input type="number" class="form-control" id="regen_one_video_id" min="1" placeholder="e.g. 123" style="width:140px">
+                        <label class="m-l-10"><input type="checkbox" id="regen_one_force"> replace existing summary</label>
+                        <button type="button" class="btn btn-warning m-l-10" id="regen-one-btn">Regenerate</button>
+                    </div>
+                    <p class="text-muted m-t-10">Uses the stored transcript only (no audio, no Whisper) and never changes the video description. Shows calls and estimated cost.</p>
                 </div>
             </div>
         </div>
@@ -390,6 +410,33 @@ $('#regenerate-seo-btn').on('click', function() {
         $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
         refreshTranscriptStatus();
     }, 'json');
+});
+
+$('#regen-one-btn').on('click', function() {
+    var vid = parseInt($('#regen_one_video_id').val(), 10);
+    if (!vid) {
+        $('.transcribe-batch-alert').html('<div class="alert alert-warning">Enter an internal video ID.</div>');
+        return;
+    }
+    var btn = $(this).prop('disabled', true).text('Working…');
+    $.post('{{LINK aj/ap/transcribe_regenerate_summary}}', {
+        video_id: vid,
+        force: $('#regen_one_force').is(':checked') ? 1 : 0
+    }, function(res) {
+        btn.prop('disabled', false).text('Regenerate');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        var html = $('<div>').text(res.message || '').html();
+        if (res.status == 200 && res.summary) {
+            html += '<br><strong>Summary:</strong> ' + $('<div>').text(res.summary).html();
+            if (res.key_takeaways && res.key_takeaways.length) {
+                html += '<ul>' + res.key_takeaways.map(function(t) { return '<li>' + $('<div>').text(t).html() + '</li>'; }).join('') + '</ul>';
+            }
+        }
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + html + '</div>');
+    }, 'json').fail(function() {
+        btn.prop('disabled', false).text('Regenerate');
+        $('.transcribe-batch-alert').html('<div class="alert alert-danger">Request failed.</div>');
+    });
 });
 
 var loadPollTimer = null;
