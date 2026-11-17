@@ -24,7 +24,8 @@ const KX_AUDIO_EXTS = array('wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus');
 const KX_MAX_SAMPLES = 10;
 const KX_CSV_COLUMNS = array(
     'video_id', 'db_id', 'title', 'duration', 'duration_seconds', 'source_type', 'source_ref', 'source_exists',
-    'source_size_bytes', 'db_size_bytes', 'saved_audio_available', 'saved_audio_file', 'saved_audio_size_bytes',
+    'source_size_bytes', 'db_size_bytes', 'saved_audio_available', 'saved_audio_location', 'saved_audio_file',
+    'saved_audio_size_bytes', 'r2_audio_copies',
     'transcript_status', 'privacy', 'zoom_word_in_title', 'qa_verified', 'qa_title_hint', 'review_flag',
     'eligible', 'reason',
 );
@@ -43,6 +44,11 @@ Options:
   --exclude-ids-file=FILE  Extra video_ids to treat as private patient recordings (always skipped).
   --all-channels         Include every channel (default: the transcript channels from site config).
   --audio-dir=DIR        Extra directory to look in for saved audio named <video_id>.<ext> (repeatable).
+  --audio-manifest=FILE  Listing of audio kept in object storage (R2), e.g. from
+                         rclone lsf --format "pst" r2:videos/upload/temp/transcribe/ > FILE
+                         (also accepts `aws s3 ls` output). Names: audio_<db id>_<unix ts>.wav.
+                         Listing only: nothing is downloaded and no URLs are exported.
+  --r2-remote=REMOTE     rclone remote:bucket used in the retrieve hints (default r2:videos).
   --sample-ids=ID[,ID]   Sample mode (max 10): export saved audio for these video_ids (or numeric db ids)
                          as <video_id>.<ext>; if no audio is retained, report the original media source.
   --help                 Show this help.
@@ -52,7 +58,7 @@ TXT;
 
 function kx_parse_args(array $argv) {
     $o = array('out_dir' => null, 'qa_file' => null, 'exclude_file' => null, 'all_channels' => false,
-        'audio_dirs' => array(), 'sample_ids' => array(), 'help' => false, 'errors' => array());
+        'audio_dirs' => array(), 'manifest' => null, 'r2_remote' => 'r2:videos', 'sample_ids' => array(), 'help' => false, 'errors' => array());
     foreach (array_slice($argv, 1) as $arg) {
         if ($arg === '--help' || $arg === '-h') { $o['help'] = true; continue; }
         if ($arg === '--all-channels') { $o['all_channels'] = true; continue; }
@@ -63,6 +69,10 @@ function kx_parse_args(array $argv) {
             case 'qa-ids-file': $o['qa_file'] = $v; break;
             case 'exclude-ids-file': $o['exclude_file'] = $v; break;
             case 'audio-dir': $o['audio_dirs'][] = $v; break;
+            case 'audio-manifest': $o['manifest'] = $v; break;
+            case 'r2-remote':
+                if (!preg_match('/^[A-Za-z0-9_.-]+:[A-Za-z0-9._-]+$/', $v)) { $o['errors'][] = 'Bad --r2-remote (expected remote:bucket).'; break; }
+                $o['r2_remote'] = $v; break;
             case 'sample-ids':
                 foreach (explode(',', $v) as $id) {
                     $id = trim($id);
@@ -160,6 +170,28 @@ function kx_inside($path, $dir) {
  * (audio_<db id>_<ts>.wav in upload/temp/transcribe) or files in --audio-dir named <video_id>.<ext>.
  * Files modified in the last 5 minutes are skipped: they may belong to a running job.
  */
+/**
+ * Parse an object-storage listing of audio_<db id>_<unix ts>.wav files. Returns db id => best copy
+ * (largest, then newest timestamp) plus the number of copies. Lines that do not match are ignored.
+ */
+function kx_load_manifest($path, $prefix = 'upload/temp/transcribe/') {
+    $lines = @file($path, FILE_IGNORE_NEW_LINES);
+    if ($lines === false) { return false; }
+    $best = array();
+    foreach ($lines as $line) {
+        // rclone "pst": path;size;time   |   aws s3 ls: "2026-11-14 10:58:42  102799462 audio_1_2.wav"
+        if (!preg_match('/(?:^|[\s\/;])(audio_(\d+)_(\d+)\.wav)(?:;(\d+)|\s*$)/', $line, $m)) { continue; }
+        $size = isset($m[4]) && $m[4] !== '' ? (int) $m[4] : (preg_match('/^\S+\s+\S+\s+(\d+)\s/', $line, $n) ? (int) $n[1] : 0);
+        $id = (int) $m[2];
+        $cand = array('key' => $prefix . $m[1], 'size' => $size, 'ts' => (int) $m[3], 'copies' => 1);
+        if (!isset($best[$id])) { $best[$id] = $cand; continue; }
+        $copies = $best[$id]['copies'] + 1;
+        if ($cand['size'] > $best[$id]['size'] || ($cand['size'] === $best[$id]['size'] && $cand['ts'] > $best[$id]['ts'])) { $best[$id] = $cand; }
+        $best[$id]['copies'] = $copies;
+    }
+    return $best;
+}
+
 function kx_find_audio($root, $db_id, $video_id, array $audio_dirs) {
     $found = array();
     $tmp = $root . '/upload/temp/transcribe';
@@ -217,6 +249,7 @@ function kx_build_record(array $row, $root, array $ctx, array $audio_dirs) {
     list($eligible, $rule, $reason) = kx_classify($row, $ctx);
     $vid = (string) $row['video_id'];
     $audio = kx_find_audio($root, $row['id'], $vid, $audio_dirs);
+    $r2 = (!$audio && isset($ctx['manifest'][(int) $row['id']])) ? $ctx['manifest'][(int) $row['id']] : null;
     return array(
         'video_id' => $vid,
         'db_id' => (int) $row['id'],
@@ -228,9 +261,11 @@ function kx_build_record(array $row, $root, array $ctx, array $audio_dirs) {
         'source_exists' => $src['exists'],
         'source_size_bytes' => $src['size'],
         'db_size_bytes' => (int) $row['size'],
-        'saved_audio_available' => $audio ? 'yes' : 'no',
-        'saved_audio_file' => $audio ? basename($audio) : '',
-        'saved_audio_size_bytes' => $audio ? filesize($audio) : '',
+        'saved_audio_available' => ($audio || $r2) ? 'yes' : 'no',
+        'saved_audio_location' => $audio ? 'server_disk' : ($r2 ? 'r2' : 'none'),
+        'saved_audio_file' => $audio ? basename($audio) : ($r2 ? basename($r2['key']) : ''),
+        'saved_audio_size_bytes' => $audio ? filesize($audio) : ($r2 ? $r2['size'] : ''),
+        'r2_audio_copies' => $r2 ? $r2['copies'] : '',
         'transcript_status' => (string) ($row['transcript_status'] ?? ''),
         'privacy' => (int) $row['privacy'],
         'zoom_word_in_title' => kx_title_has_zoom($row['title']) ? 'yes' : 'no',
@@ -241,6 +276,7 @@ function kx_build_record(array $row, $root, array $ctx, array $audio_dirs) {
         'reason' => $reason,
         '_rule' => $rule,
         '_audio_path' => $audio,
+        '_r2_key' => $r2 ? $r2['key'] : '',
     );
 }
 
@@ -349,11 +385,11 @@ function kx_run_inventory($root, $out_dir, array $rows, array $ctx, array $audio
     return array($inv, $skp, $records);
 }
 
-function kx_run_samples($out_dir, array $records, array $wanted, array $ctx) {
+function kx_run_samples($out_dir, array $records, array $wanted, array $ctx, $r2_remote = 'r2:videos') {
     $dir = $out_dir . '/samples';
     if (!is_dir($dir)) { mkdir($dir, 0700, true); }
     $report = array();
-    $cols = array('requested', 'video_id', 'kind', 'status', 'file', 'bytes', 'sha256', 'original_source_type', 'original_source_ref', 'original_source_exists', 'original_source_size_bytes', 'note');
+    $cols = array('requested', 'video_id', 'kind', 'status', 'file', 'bytes', 'sha256', 'original_source_type', 'original_source_ref', 'original_source_exists', 'original_source_size_bytes', 'retrieve_command', 'note');
     foreach ($wanted as $req) {
         $rec = null;
         foreach ($records as $r) { if ($r['video_id'] === $req || (string) $r['db_id'] === $req) { $rec = $r; break; } }
@@ -374,6 +410,12 @@ function kx_run_samples($out_dir, array $records, array $wanted, array $ctx) {
                 continue;
             }
             $report[] = $row + array('status' => 'copy_failed', 'note' => 'Could not copy saved audio.');
+            continue;
+        }
+        if ($rec['_r2_key'] !== '') {
+            $report[] = $row + array('status' => 'audio_in_r2', 'file' => $rec['video_id'] . '.wav', 'bytes' => $rec['saved_audio_size_bytes'],
+                'retrieve_command' => 'rclone copyto ' . $r2_remote . '/' . $rec['_r2_key'] . ' ./' . $rec['video_id'] . '.wav',
+                'note' => 'Audio is in R2, not on this server. Run the retrieve command with your own R2 credentials; the exporter downloads nothing.');
             continue;
         }
         $report[] = $row + array('status' => 'audio_not_retained', 'note' => 'Worker deletes its temp WAV after each job. Original media source reported; FFmpeg was not run.');
@@ -405,6 +447,11 @@ function kx_main(array $argv) {
     $m->close();
 
     $ctx = array('qa_ids' => $qa, 'exclude_ids' => $ex, 'max_duration' => $max);
+    $ctx['manifest'] = array();
+    if ($opts['manifest'] !== null) {
+        $ctx['manifest'] = kx_load_manifest($opts['manifest']);
+        if ($ctx['manifest'] === false) { fwrite(STDERR, "Cannot read the audio manifest.\n"); return 2; }
+    }
     list($inv, $skp, $records) = kx_run_inventory($root, $out_dir, $rows, $ctx, $opts['audio_dirs']);
     if ($inv === null) { fwrite(STDERR, "Could not write CSV files.\n"); return 1; }
 
@@ -416,13 +463,16 @@ function kx_main(array $argv) {
     $unknown_qa = array_diff(array_keys($qa), array_keys($known));
     echo 'Videos examined: ' . count($records) . "\n";
     foreach ($counts as $k => $n) { echo str_pad($k, 36) . $n . "\n"; }
-    $audio_n = count(array_filter($records, function ($r) { return $r['saved_audio_available'] === 'yes'; }));
-    echo "Saved audio found for:               $audio_n video(s)\n";
+    $loc = array();
+    foreach ($records as $r) { if ($r['saved_audio_available'] === 'yes') { $loc[$r['saved_audio_location']] = ($loc[$r['saved_audio_location']] ?? 0) + 1; } }
+    echo 'Saved audio found for:               ' . (array_sum($loc) ?: 0) . ' video(s)';
+    foreach ($loc as $k => $n) { echo " [$k: $n]"; }
+    echo "\n";
     if ($unknown_qa) { echo 'Warning: Q&A ids not found in selected channels: ' . implode(', ', $unknown_qa) . "\n"; }
     echo "Inventory: $inv\nSkipped:   $skp\n";
 
     if ($opts['sample_ids']) {
-        list($rep, $res) = kx_run_samples($out_dir, $records, $opts['sample_ids'], $ctx);
+        list($rep, $res) = kx_run_samples($out_dir, $records, $opts['sample_ids'], $ctx, $opts['r2_remote']);
         echo "\nSample export:\n";
         foreach ($res as $r) { echo '  ' . $r['requested'] . ' -> ' . $r['status'] . ($r['file'] !== '' ? ' (' . $r['file'] . ')' : '') . "\n"; }
         echo "Sample report: $rep\n";

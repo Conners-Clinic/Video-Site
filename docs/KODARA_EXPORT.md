@@ -8,6 +8,17 @@
 
 The exporter therefore reports saved audio only when a leftover `audio_<db id>_*.wav` exists (files touched in the last 5 minutes are ignored, they may belong to a running job) or a file named `<video_id>.<ext>` sits in a directory passed with `--audio-dir`. Otherwise it reports the original media source.
 
+## Audio kept in R2
+
+After the hosting migration, leftover worker WAVs (`audio_<db id>_<unix ts>.wav`) were found in the R2 bucket `videos` under `upload/temp/transcribe/`, often several copies per video (retried jobs). To include them, have someone with R2 credentials write a listing (names, sizes, dates only) and pass it with `--audio-manifest`:
+
+```bash
+rclone lsf --format "pst" r2:videos/upload/temp/transcribe/ > kodara-r2-audio-listing.csv
+php scripts/export_transcription_inventory.php --out-dir=$HOME/kodara-export --audio-manifest=$HOME/kodara-r2-audio-listing.csv --qa-ids-file=$HOME/kodara-qa-ids.txt
+```
+
+Per video the inventory then shows `saved_audio_location` (`server_disk`, `r2` or `none`), the best copy (largest, then newest) and `r2_audio_copies`. For a sample whose audio is in R2, the sample report gives status `audio_in_r2` and a `retrieve_command` (`rclone copyto r2:videos/<key> ./<video_id>.wav`) to run with your own credentials. The exporter never downloads from R2, never holds R2 keys, and exports no URLs. Do not paste R2 keys into chats or commit them.
+
 ## Why it does not load `assets/init.php`
 
 `init.php` starts a session and loads `app_start.php`, which sets cookies, can redirect/exit for logged-in users, reads `$_SERVER['HTTP_HOST']`, and can write to the database (language rows, user language). There is no existing production CLI job in the repo (the cron scripts load `init.php` over HTTP). The exporter instead does what `app_start.php` does for the connection: it reads `config.php` and opens a `mysqli` connection with the same variables, then sets the transaction read only. Credentials are never printed; failures print only an error number.
