@@ -29,8 +29,8 @@ Per eligible video the inventory shows the best copy (largest, then newest) of e
 | Scope | Videos owned by the transcript channels in site config (`transcript_channel_usernames`, default `DrKevinConners,ConnersClinic`). `--all-channels` includes everything. |
 | Private | `privacy` other than 0 (private or unlisted), or listed in `--exclude-ids-file`: always skipped (rule `private`). Nothing, including the Q&A list, overrides this. Titles that look patient-related get `review_flag=title_looks_patient_related` for you to check; they are not excluded by title alone. |
 | Not self-hosted | Embeds, remote URLs, empty location, `converted=2`: skipped. Movies and shorts: skipped (same as the existing backfill). |
-| Full Zoom call | Title contains `ZOOM` as a whole word, case-insensitive (`Zoom call` matches, `Zoomer` does not): skipped (rule `full_zoom_call`), **unless** the video_id is on the verified Q&A list. |
-| Verified Q&A | Only IDs in `--qa-ids-file` count as verified. The database has no Q&A field, so the script cannot verify them itself. `qa_title_hint` marks titles that look like Q&A so you can build the list, but it never changes eligibility. |
+| Zoom | Title contains `ZOOM` as a whole word, case-insensitive (`Zoom call` matches, `Zoomer` does not): skipped (rule `full_zoom_call`). No exceptions, because no real Q&A clip has ZOOM in its title. |
+| Q&A clips | Regular eligible videos. `--qa-ids-file` only fills the optional `qa_verified` column; `qa_title_hint` marks titles that look like Q&A. |
 | Long videos | Longer than the worker's `transcript_max_duration` (default 7200 s): still eligible, flagged `over_worker_max_duration_<n>s` in `review_flag`. |
 
 ## Commands for the developer (on the server, as the site user)

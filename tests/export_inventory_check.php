@@ -37,7 +37,7 @@ $out = "$root/out"; mkdir($out);
 list($inv, $skp, $recs) = kx_run_inventory($root, $out, $rows, $ctx, array());
 $by = array(); foreach ($recs as $r) { $by[$r['video_id']] = $r; }
 ok($by['regular1']['eligible'] === 'yes', 'regular eligible');
-ok($by['qa1']['eligible'] === 'yes' && $by['qa1']['_rule'] === 'verified_qa_overrides_zoom', 'verified Q&A with ZOOM eligible');
+ok($by['qa1']['eligible'] === 'no' && $by['qa1']['_rule'] === 'full_zoom_call', 'any ZOOM title excluded, even if on the Q&A list');
 ok($by['zoom1']['_rule'] === 'full_zoom_call' && $by['zoom2']['_rule'] === 'full_zoom_call', 'zoom calls skipped (incl. unverified Q&A-titled)');
 ok($by['priv1']['_rule'] === 'private' && $by['priv2']['_rule'] === 'private', 'private skipped, not overridable by Q&A list');
 ok($by['yt1']['_rule'] === 'not_self_hosted', 'embed skipped');

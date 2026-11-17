@@ -41,8 +41,8 @@ Read-only Kodara transcription backfill exporter (CLI only).
 Options:
   --out-dir=DIR          Private output directory (must be OUTSIDE the web root).
                          Default: <parent of web root>/kodara-export
-  --qa-ids-file=FILE     Verified individual Q&A clips: one video_id per line ('#' comments allowed).
-                         These stay eligible even if the title contains ZOOM.
+  --qa-ids-file=FILE     Optional: verified Q&A clip video_ids, one per line, only to fill the qa_verified
+                         column. It does not change eligibility (any title with ZOOM is excluded).
   --exclude-ids-file=FILE  Extra video_ids to treat as private patient recordings (always skipped).
   --all-channels         Include every channel (default: the transcript channels from site config).
   --audio-dir=DIR        Extra directory to look in for saved audio named <video_id>.<ext> (repeatable).
@@ -259,8 +259,7 @@ function kx_classify(array $row, array $ctx) {
         return array(false, 'movie_or_short', 'Movie or short (excluded by the existing backfill rules)');
     }
     if (kx_title_has_zoom($title)) {
-        if ($qa) { return array(true, 'verified_qa_overrides_zoom', 'Verified individual Q&A clip; ZOOM in title ignored'); }
-        return array(false, 'full_zoom_call', 'Title contains whole word ZOOM and not on the verified Q&A list');
+        return array(false, 'full_zoom_call', 'Title contains the whole word ZOOM (all ZOOM titles are excluded)');
     }
     return array(true, $qa ? 'verified_qa' : 'regular', $qa ? 'Verified individual Q&A clip' : 'Self-hosted upload, no ZOOM in title');
 }
