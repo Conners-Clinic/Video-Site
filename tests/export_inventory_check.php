@@ -47,7 +47,7 @@ ok($by['regular1']['source_type'] === 'local_file' && $by['regular1']['source_si
 ok($by['qa1']['saved_audio_available'] === 'yes' && $by['regular1']['saved_audio_available'] === 'no', 'leftover audio found by db id');
 $by3 = kx_build_record(row(3, 'zoom1', 'x'), $root, $ctx, array());
 ok($by3['saved_audio_available'] === 'no', 'fresh (possibly in-use) wav ignored');
-ok(count(file($skp)) === 6, 'skipped csv rows (header + 5)'); // 8 - 3 eligible
+ok(count(file($skp)) === 7, 'skipped csv rows (header + 6)'); // 8 - 2 eligible
 list($rep, $res) = kx_run_samples($out, $recs, array('qa1', 'regular1', 'priv1', 'nope'), $ctx);
 $s = array(); foreach ($res as $r) { $s[$r['requested']] = $r; }
 ok($s['qa1']['status'] === 'copied' && is_file("$out/samples/qa1.wav") && substr(sprintf('%o', fileperms("$out/samples/qa1.wav")), -3) === '600', 'sample copied as <video_id>.wav, 0600');
