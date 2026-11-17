@@ -25,7 +25,9 @@ const KX_MAX_SAMPLES = 10;
 const KX_CSV_COLUMNS = array(
     'video_id', 'db_id', 'title', 'duration', 'duration_seconds', 'source_type', 'source_ref', 'source_exists',
     'source_size_bytes', 'db_size_bytes', 'saved_audio_available', 'saved_audio_location', 'saved_audio_file',
-    'saved_audio_size_bytes', 'r2_audio_copies',
+    'saved_audio_size_bytes',
+    'cached_wav_key', 'cached_wav_size_bytes', 'cached_wav_copies', 'cached_wav_check',
+    'cached_mp4_key', 'cached_mp4_size_bytes', 'cached_mp4_copies', 'cached_mp4_check', 'temp_copy_flag',
     'transcript_status', 'privacy', 'zoom_word_in_title', 'qa_verified', 'qa_title_hint', 'review_flag',
     'eligible', 'reason',
 );
@@ -46,8 +48,9 @@ Options:
   --audio-dir=DIR        Extra directory to look in for saved audio named <video_id>.<ext> (repeatable).
   --audio-manifest=FILE  Listing of audio kept in object storage (R2), e.g. from
                          rclone lsf --format "pst" r2:videos/upload/temp/transcribe/ > FILE
-                         (also accepts `aws s3 ls` output). Names: audio_<db id>_<unix ts>.wav.
-                         Listing only: nothing is downloaded and no URLs are exported.
+                         (also accepts `aws s3 ls` output). Reads audio_<db id>_<unix ts>.wav and
+                         video_<db id>_<unix ts>.mp4 temp copies. All are reported as UNVERIFIED temp
+                         copies (separate CSV). Listing only: nothing is downloaded, no URLs exported.
   --r2-remote=REMOTE     rclone remote:bucket used in the retrieve hints (default r2:videos).
   --sample-ids=ID[,ID]   Sample mode (max 10): export saved audio for these video_ids (or numeric db ids)
                          as <video_id>.<ext>; if no audio is retained, report the original media source.
@@ -166,32 +169,55 @@ function kx_inside($path, $dir) {
 }
 
 /**
- * Saved audio: the live worker deletes its temp WAV when a job ends, so this finds only leftovers
- * (audio_<db id>_<ts>.wav in upload/temp/transcribe) or files in --audio-dir named <video_id>.<ext>.
- * Files modified in the last 5 minutes are skipped: they may belong to a running job.
- */
-/**
- * Parse an object-storage listing of audio_<db id>_<unix ts>.wav files. Returns db id => best copy
- * (largest, then newest timestamp) plus the number of copies. Lines that do not match are ignored.
+ * Parse an object-storage listing of the worker's temp copies:
+ *   audio_<db id>_<unix ts>.wav   (extracted audio)     video_<db id>_<unix ts>.mp4   (downloaded original)
+ * Returns db id => array('wav' => best|null, 'mp4' => best|null, 'objects' => every copy). "Best" = largest,
+ * then newest. Anything else in the listing (folders, index.php, ...) is ignored.
  */
 function kx_load_manifest($path, $prefix = 'upload/temp/transcribe/') {
     $lines = @file($path, FILE_IGNORE_NEW_LINES);
     if ($lines === false) { return false; }
-    $best = array();
+    $out = array();
     foreach ($lines as $line) {
         // rclone "pst": path;size;time   |   aws s3 ls: "2026-11-14 10:58:42  102799462 audio_1_2.wav"
-        if (!preg_match('/(?:^|[\s\/;])(audio_(\d+)_(\d+)\.wav)(?:;(\d+)|\s*$)/', $line, $m)) { continue; }
-        $size = isset($m[4]) && $m[4] !== '' ? (int) $m[4] : (preg_match('/^\S+\s+\S+\s+(\d+)\s/', $line, $n) ? (int) $n[1] : 0);
-        $id = (int) $m[2];
-        $cand = array('key' => $prefix . $m[1], 'size' => $size, 'ts' => (int) $m[3], 'copies' => 1);
-        if (!isset($best[$id])) { $best[$id] = $cand; continue; }
-        $copies = $best[$id]['copies'] + 1;
-        if ($cand['size'] > $best[$id]['size'] || ($cand['size'] === $best[$id]['size'] && $cand['ts'] > $best[$id]['ts'])) { $best[$id] = $cand; }
-        $best[$id]['copies'] = $copies;
+        if (!preg_match('/(?:^|[\s\/;])((audio)_(\d+)_(\d+)\.wav|(video)_(\d+)_(\d+)\.mp4)(?:;(\d+)|\s*$)/', $line, $m)) { continue; }
+        $kind = $m[2] !== '' ? 'wav' : 'mp4';
+        $id = (int) ($kind === 'wav' ? $m[3] : $m[6]);
+        $ts = (int) ($kind === 'wav' ? $m[4] : $m[7]);
+        $size = isset($m[8]) && $m[8] !== '' ? (int) $m[8] : (preg_match('/^\S+\s+\S+\s+(\d+)\s/', $line, $n) ? (int) $n[1] : 0);
+        $cand = array('kind' => $kind, 'key' => $prefix . $m[1], 'size' => $size, 'ts' => $ts, 'copies' => 1);
+        if (!isset($out[$id])) { $out[$id] = array('wav' => null, 'mp4' => null, 'objects' => array()); }
+        $out[$id]['objects'][] = $cand;
+        $cur = $out[$id][$kind];
+        if ($cur === null) { $out[$id][$kind] = $cand; continue; }
+        $copies = $cur['copies'] + 1;
+        if ($cand['size'] > $cur['size'] || ($cand['size'] === $cur['size'] && $cand['ts'] > $cur['ts'])) { $cur = $cand; }
+        $cur['copies'] = $copies;
+        $out[$id][$kind] = $cur;
     }
-    return $best;
+    return $out;
 }
 
+/** Plausibility only (not verification): 16 kHz mono 16-bit WAV is 32000 bytes per second plus a 44-byte header. */
+function kx_wav_check($size, $secs) {
+    if ($size < 1048576) { return 'under_1MB'; }
+    if ($secs <= 0) { return 'duration_unknown'; }
+    $exp = $secs * 32000 + 44;
+    if (abs($size - $exp) / $exp <= 0.03) { return 'matches_duration'; }
+    return $size < $exp ? 'shorter_than_duration' : 'longer_than_duration';
+}
+
+function kx_mp4_check($size, $original_size) {
+    if ($size < 1048576) { return 'under_1MB'; }
+    if ($original_size <= 0) { return 'original_size_unknown'; }
+    return $size === (int) $original_size ? 'matches_original_size' : 'differs_from_original_size';
+}
+
+/**
+ * Saved audio: the live worker deletes its temp WAV when a job ends, so this finds only leftovers
+ * (audio_<db id>_<ts>.wav in upload/temp/transcribe) or files in --audio-dir named <video_id>.<ext>.
+ * Files modified in the last 5 minutes are skipped: they may belong to a running job.
+ */
 function kx_find_audio($root, $db_id, $video_id, array $audio_dirs) {
     $found = array();
     $tmp = $root . '/upload/temp/transcribe';
@@ -236,11 +262,6 @@ function kx_classify(array $row, array $ctx) {
         if ($qa) { return array(true, 'verified_qa_overrides_zoom', 'Verified individual Q&A clip; ZOOM in title ignored'); }
         return array(false, 'full_zoom_call', 'Title contains whole word ZOOM and not on the verified Q&A list');
     }
-    $max = (int) $ctx['max_duration'];
-    $secs = kx_duration_seconds($row['duration']);
-    if ($max > 0 && $secs > $max) {
-        return array(false, 'over_max_duration', "Duration {$secs}s exceeds the worker limit ({$max}s)");
-    }
     return array(true, $qa ? 'verified_qa' : 'regular', $qa ? 'Verified individual Q&A clip' : 'Self-hosted upload, no ZOOM in title');
 }
 
@@ -249,7 +270,19 @@ function kx_build_record(array $row, $root, array $ctx, array $audio_dirs) {
     list($eligible, $rule, $reason) = kx_classify($row, $ctx);
     $vid = (string) $row['video_id'];
     $audio = kx_find_audio($root, $row['id'], $vid, $audio_dirs);
-    $r2 = (!$audio && isset($ctx['manifest'][(int) $row['id']])) ? $ctx['manifest'][(int) $row['id']] : null;
+    $tmp = isset($ctx['manifest'][(int) $row['id']]) ? $ctx['manifest'][(int) $row['id']] : array('wav' => null, 'mp4' => null);
+    $wav = $tmp['wav'];
+    $mp4 = $tmp['mp4'];
+    $secs = kx_duration_seconds($row['duration']);
+    $wav_check = $wav ? kx_wav_check($wav['size'], $secs) : '';
+    $mp4_check = $mp4 ? kx_mp4_check($mp4['size'], $src['size'] !== '' ? (int) $src['size'] : (int) $row['size']) : '';
+    $flags = array();
+    if ($wav || $mp4) { $flags[] = 'unverified_temp_copy'; }
+    if ($wav && $wav_check !== 'matches_duration') { $flags[] = 'wav_' . $wav_check; }
+    $review = array();
+    if (kx_title_patient_hint($row['title'])) { $review[] = 'title_looks_patient_related'; }
+    $max = (int) $ctx['max_duration'];
+    if ($max > 0 && $secs > $max) { $review[] = 'over_worker_max_duration_' . $max . 's'; }
     return array(
         'video_id' => $vid,
         'db_id' => (int) $row['id'],
@@ -261,22 +294,31 @@ function kx_build_record(array $row, $root, array $ctx, array $audio_dirs) {
         'source_exists' => $src['exists'],
         'source_size_bytes' => $src['size'],
         'db_size_bytes' => (int) $row['size'],
-        'saved_audio_available' => ($audio || $r2) ? 'yes' : 'no',
-        'saved_audio_location' => $audio ? 'server_disk' : ($r2 ? 'r2' : 'none'),
-        'saved_audio_file' => $audio ? basename($audio) : ($r2 ? basename($r2['key']) : ''),
-        'saved_audio_size_bytes' => $audio ? filesize($audio) : ($r2 ? $r2['size'] : ''),
-        'r2_audio_copies' => $r2 ? $r2['copies'] : '',
+        'saved_audio_available' => $audio ? 'yes' : 'no',
+        'saved_audio_location' => $audio ? 'server_disk' : 'none',
+        'saved_audio_file' => $audio ? basename($audio) : '',
+        'saved_audio_size_bytes' => $audio ? filesize($audio) : '',
+        'cached_wav_key' => $wav ? $wav['key'] : '',
+        'cached_wav_size_bytes' => $wav ? $wav['size'] : '',
+        'cached_wav_copies' => $wav ? $wav['copies'] : '',
+        'cached_wav_check' => $wav_check,
+        'cached_mp4_key' => $mp4 ? $mp4['key'] : '',
+        'cached_mp4_size_bytes' => $mp4 ? $mp4['size'] : '',
+        'cached_mp4_copies' => $mp4 ? $mp4['copies'] : '',
+        'cached_mp4_check' => $mp4_check,
+        'temp_copy_flag' => implode(';', $flags),
         'transcript_status' => (string) ($row['transcript_status'] ?? ''),
         'privacy' => (int) $row['privacy'],
         'zoom_word_in_title' => kx_title_has_zoom($row['title']) ? 'yes' : 'no',
         'qa_verified' => isset($ctx['qa_ids'][$vid]) ? 'yes' : 'no',
         'qa_title_hint' => kx_title_has_qa_hint($row['title']) ? 'yes' : 'no',
-        'review_flag' => kx_title_patient_hint($row['title']) ? 'title_looks_patient_related' : '',
+        'review_flag' => implode(';', $review),
         'eligible' => $eligible ? 'yes' : 'no',
         'reason' => $reason,
         '_rule' => $rule,
         '_audio_path' => $audio,
-        '_r2_key' => $r2 ? $r2['key'] : '',
+        '_cached_wav_key' => $wav ? $wav['key'] : '',
+        '_cached_mp4_key' => $mp4 ? $mp4['key'] : '',
     );
 }
 
@@ -370,6 +412,31 @@ function kx_video_select($where) {
 
 // ---------------------------------------------------------------- modes
 
+const KX_TEMP_COLUMNS = array('video_id', 'db_id', 'in_inventory', 'eligible', 'kind', 'key', 'size_bytes', 'created_utc_from_name',
+    'is_best_copy', 'copies_of_kind', 'check', 'flag');
+
+/** One row per temp object in the listing, kept apart from the inventory. Includes ids not in the inventory. */
+function kx_temp_copy_rows(array $manifest, array $records) {
+    $by = array();
+    foreach ($records as $r) { $by[$r['db_id']] = $r; }
+    $rows = array();
+    ksort($manifest);
+    foreach ($manifest as $id => $m) {
+        $r = isset($by[$id]) ? $by[$id] : null;
+        foreach ($m['objects'] as $o) {
+            $best = $m[$o['kind']];
+            $check = $r ? ($o['kind'] === 'wav' ? kx_wav_check($o['size'], $r['duration_seconds'])
+                : kx_mp4_check($o['size'], $r['source_size_bytes'] !== '' ? (int) $r['source_size_bytes'] : (int) $r['db_size_bytes'])) : 'not_checked';
+            $rows[] = array('video_id' => $r ? $r['video_id'] : '', 'db_id' => $id,
+                'in_inventory' => $r ? 'yes' : 'no_not_in_selected_channels', 'eligible' => $r ? $r['eligible'] : '',
+                'kind' => $o['kind'], 'key' => $o['key'], 'size_bytes' => $o['size'], 'created_utc_from_name' => gmdate('Y-m-d H:i:s', $o['ts']),
+                'is_best_copy' => $o['key'] === $best['key'] ? 'yes' : 'no', 'copies_of_kind' => $best['copies'], 'check' => $check,
+                'flag' => 'unverified_temp_copy');
+        }
+    }
+    return $rows;
+}
+
 function kx_run_inventory($root, $out_dir, array $rows, array $ctx, array $audio_dirs) {
     $records = array();
     foreach ($rows as $row) { $records[] = kx_build_record($row, $root, $ctx, $audio_dirs); }
@@ -380,9 +447,14 @@ function kx_run_inventory($root, $out_dir, array $rows, array $ctx, array $audio
     $skp = $out_dir . "/skipped_$stamp.csv";
     $cols_skipped = array_merge(array('_rule'), KX_CSV_COLUMNS);
     if (!kx_write_csv($inv, KX_CSV_COLUMNS, $records) || !kx_write_csv($skp, $cols_skipped, $skipped)) {
-        return array(null, null, $records);
+        return array(null, null, $records, null);
     }
-    return array($inv, $skp, $records);
+    $tmp_csv = null;
+    if (!empty($ctx['manifest'])) {
+        $tmp_csv = $out_dir . "/unverified_temp_copies_$stamp.csv";
+        if (!kx_write_csv($tmp_csv, KX_TEMP_COLUMNS, kx_temp_copy_rows($ctx['manifest'], $records))) { return array(null, null, $records, null); }
+    }
+    return array($inv, $skp, $records, $tmp_csv);
 }
 
 function kx_run_samples($out_dir, array $records, array $wanted, array $ctx, $r2_remote = 'r2:videos') {
@@ -412,10 +484,16 @@ function kx_run_samples($out_dir, array $records, array $wanted, array $ctx, $r2
             $report[] = $row + array('status' => 'copy_failed', 'note' => 'Could not copy saved audio.');
             continue;
         }
-        if ($rec['_r2_key'] !== '') {
-            $report[] = $row + array('status' => 'audio_in_r2', 'file' => $rec['video_id'] . '.wav', 'bytes' => $rec['saved_audio_size_bytes'],
-                'retrieve_command' => 'rclone copyto ' . $r2_remote . '/' . $rec['_r2_key'] . ' ./' . $rec['video_id'] . '.wav',
-                'note' => 'Audio is in R2, not on this server. Run the retrieve command with your own R2 credentials; the exporter downloads nothing.');
+        if ($rec['_cached_wav_key'] !== '') {
+            $report[] = $row + array('status' => 'unverified_wav_in_r2', 'file' => $rec['video_id'] . '.wav', 'bytes' => $rec['cached_wav_size_bytes'],
+                'retrieve_command' => 'rclone copyto ' . $r2_remote . '/' . $rec['_cached_wav_key'] . ' ./' . $rec['video_id'] . '.wav',
+                'note' => 'Unverified temp WAV (check: ' . $rec['cached_wav_check'] . ') in R2, not on this server. Run the command with your own R2 credentials; the exporter downloads nothing.');
+            continue;
+        }
+        if ($rec['_cached_mp4_key'] !== '') {
+            $report[] = $row + array('status' => 'unverified_mp4_in_r2', 'file' => $rec['video_id'] . '.mp4', 'bytes' => $rec['cached_mp4_size_bytes'],
+                'retrieve_command' => 'rclone copyto ' . $r2_remote . '/' . $rec['_cached_mp4_key'] . ' ./' . $rec['video_id'] . '.mp4',
+                'note' => 'No WAV; unverified temp MP4 copy (check: ' . $rec['cached_mp4_check'] . ') in R2. Original media source is reported above.');
             continue;
         }
         $report[] = $row + array('status' => 'audio_not_retained', 'note' => 'Worker deletes its temp WAV after each job. Original media source reported; FFmpeg was not run.');
@@ -452,7 +530,7 @@ function kx_main(array $argv) {
         $ctx['manifest'] = kx_load_manifest($opts['manifest']);
         if ($ctx['manifest'] === false) { fwrite(STDERR, "Cannot read the audio manifest.\n"); return 2; }
     }
-    list($inv, $skp, $records) = kx_run_inventory($root, $out_dir, $rows, $ctx, $opts['audio_dirs']);
+    list($inv, $skp, $records, $tmp_csv) = kx_run_inventory($root, $out_dir, $rows, $ctx, $opts['audio_dirs']);
     if ($inv === null) { fwrite(STDERR, "Could not write CSV files.\n"); return 1; }
 
     $counts = array();
@@ -463,13 +541,15 @@ function kx_main(array $argv) {
     $unknown_qa = array_diff(array_keys($qa), array_keys($known));
     echo 'Videos examined: ' . count($records) . "\n";
     foreach ($counts as $k => $n) { echo str_pad($k, 36) . $n . "\n"; }
-    $loc = array();
-    foreach ($records as $r) { if ($r['saved_audio_available'] === 'yes') { $loc[$r['saved_audio_location']] = ($loc[$r['saved_audio_location']] ?? 0) + 1; } }
-    echo 'Saved audio found for:               ' . (array_sum($loc) ?: 0) . ' video(s)';
-    foreach ($loc as $k => $n) { echo " [$k: $n]"; }
-    echo "\n";
+    $elig = array_filter($records, function ($r) { return $r['eligible'] === 'yes'; });
+    $n_wav = count(array_filter($elig, function ($r) { return $r['cached_wav_key'] !== ''; }));
+    $n_mp4 = count(array_filter($elig, function ($r) { return $r['cached_mp4_key'] !== ''; }));
+    $n_none = count(array_filter($elig, function ($r) { return $r['cached_wav_key'] === '' && $r['saved_audio_available'] !== 'yes'; }));
+    $n_disk = count(array_filter($elig, function ($r) { return $r['saved_audio_available'] === 'yes'; }));
+    echo "Eligible with a temp WAV in the listing: $n_wav | with a temp MP4: $n_mp4 | WAV on server disk: $n_disk | no WAV anywhere: $n_none\n";
     if ($unknown_qa) { echo 'Warning: Q&A ids not found in selected channels: ' . implode(', ', $unknown_qa) . "\n"; }
     echo "Inventory: $inv\nSkipped:   $skp\n";
+    if ($tmp_csv) { echo "Unverified temp copies: $tmp_csv\n"; }
 
     if ($opts['sample_ids']) {
         list($rep, $res) = kx_run_samples($out_dir, $records, $opts['sample_ids'], $ctx, $opts['r2_remote']);

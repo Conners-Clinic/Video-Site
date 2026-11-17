@@ -8,16 +8,15 @@
 
 The exporter therefore reports saved audio only when a leftover `audio_<db id>_*.wav` exists (files touched in the last 5 minutes are ignored, they may belong to a running job) or a file named `<video_id>.<ext>` sits in a directory passed with `--audio-dir`. Otherwise it reports the original media source.
 
-## Audio kept in R2
+## Temp copies in R2 (unverified)
 
-After the hosting migration, leftover worker WAVs (`audio_<db id>_<unix ts>.wav`) were found in the R2 bucket `videos` under `upload/temp/transcribe/`, often several copies per video (retried jobs). To include them, have someone with R2 credentials write a listing (names, sizes, dates only) and pass it with `--audio-manifest`:
+After the hosting migration, the worker's temp files were found in the R2 bucket `videos` under `upload/temp/transcribe/`: `audio_<db id>_<unix ts>.wav` (extracted audio) and `video_<db id>_<unix ts>.mp4` (downloaded originals), often many copies per video from retried jobs. They are leftovers, not an archive, and nothing verifies them. Have someone with R2 credentials write a listing (names, sizes, dates only) and pass it with `--audio-manifest`:
 
 ```bash
 rclone lsf --format "pst" r2:videos/upload/temp/transcribe/ > kodara-r2-audio-listing.csv
-php scripts/export_transcription_inventory.php --out-dir=$HOME/kodara-export --audio-manifest=$HOME/kodara-r2-audio-listing.csv --qa-ids-file=$HOME/kodara-qa-ids.txt
 ```
 
-Per video the inventory then shows `saved_audio_location` (`server_disk`, `r2` or `none`), the best copy (largest, then newest) and `r2_audio_copies`. For a sample whose audio is in R2, the sample report gives status `audio_in_r2` and a `retrieve_command` (`rclone copyto r2:videos/<key> ./<video_id>.wav`) to run with your own credentials. The exporter never downloads from R2, never holds R2 keys, and exports no URLs. Do not paste R2 keys into chats or commit them.
+Per eligible video the inventory shows the best copy (largest, then newest) of each kind: `cached_wav_key/size/copies/check` and `cached_mp4_...`, plus `temp_copy_flag=unverified_temp_copy`. Checks are plausibility only: a WAV is `matches_duration` when its size is within 3% of 16 kHz mono 16-bit for the database duration (otherwise `shorter_than_duration`, `longer_than_duration`, `under_1MB`, `duration_unknown`); an MP4 is `matches_original_size` only if it equals the original's size. `unverified_temp_copies_<stamp>.csv` lists every temp object separately (all copies, flagged best or not), including ids that are not in the inventory. A video with no WAV anywhere stays eligible. For a sample whose copy is in R2 the sample report gives a `retrieve_command` (`rclone copyto r2:videos/<key> ./<video_id>.wav`) to run with your own credentials; the exporter never downloads from R2, holds no R2 keys, and exports no URLs. Do not paste R2 keys into chats or commit them.
 
 ## Why it does not load `assets/init.php`
 
@@ -32,7 +31,7 @@ Per video the inventory then shows `saved_audio_location` (`server_disk`, `r2` o
 | Not self-hosted | Embeds, remote URLs, empty location, `converted=2`: skipped. Movies and shorts: skipped (same as the existing backfill). |
 | Full Zoom call | Title contains `ZOOM` as a whole word, case-insensitive (`Zoom call` matches, `Zoomer` does not): skipped (rule `full_zoom_call`), **unless** the video_id is on the verified Q&A list. |
 | Verified Q&A | Only IDs in `--qa-ids-file` count as verified. The database has no Q&A field, so the script cannot verify them itself. `qa_title_hint` marks titles that look like Q&A so you can build the list, but it never changes eligibility. |
-| Too long | Longer than `transcript_max_duration` (default 7200 s), as the worker skips: skipped. |
+| Long videos | Longer than the worker's `transcript_max_duration` (default 7200 s): still eligible, flagged `over_worker_max_duration_<n>s` in `review_flag`. |
 
 ## Commands for the developer (on the server, as the site user)
 
