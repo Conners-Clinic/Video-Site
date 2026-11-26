@@ -449,25 +449,35 @@ function PT_BuildWatchSecondaryCtaHtml() {
         . '</section>';
 }
 
-function PT_BuildWatchKeyTakeawaysHtml($takeaways) {
+function PT_BuildWatchKeyTakeawaysHtml($takeaways, $compact = false) {
     $takeaways = PT_ParseKeyTakeaways($takeaways);
     if (count($takeaways) < 1) {
         return '';
     }
     $lis = '';
-    foreach ($takeaways as $item) {
-        $lis .= '<li>' . htmlspecialchars($item) . '</li>';
+    $remaining = '';
+    foreach ($takeaways as $index => $item) {
+        $li = '<li>' . htmlspecialchars($item, ENT_QUOTES, 'UTF-8') . '</li>';
+        if ($compact && $index >= 3) {
+            $remaining .= $li;
+        } else {
+            $lis .= $li;
+        }
     }
+    $more = $remaining === '' ? '' : '<details class="watch-takeaways-more">'
+        . '<summary><span class="when-closed">View all ' . count($takeaways) . ' takeaways</span>'
+        . '<span class="when-open">Show fewer takeaways</span></summary>'
+        . '<ul class="watch-takeaways-list">' . $remaining . '</ul></details>';
     return '<section class="watch-section watch-section-takeaways">'
-        . '<h3 class="watch-section-heading">Key Takeaways</h3>'
-        . '<ul class="watch-takeaways-list">' . $lis . '</ul>'
+        . ($compact ? '<h2 class="watch-section-heading">Key takeaways</h2>' : '<h3 class="watch-section-heading">Key Takeaways</h3>')
+        . '<ul class="watch-takeaways-list">' . $lis . '</ul>' . $more
         . '</section>';
 }
 
-function PT_BuildWatchAboutVideoHtml($seo_summary, $fallback_markup = '') {
+function PT_BuildWatchAboutVideoHtml($seo_summary, $fallback_markup = '', $compact = false) {
     $summary_html = PT_BuildSeoSummaryHtml($seo_summary);
     if ($summary_html !== '') {
-        $cta_html = trim(PT_GetDefaultClinicCtaHtml());
+        $cta_html = $compact ? '' : trim(PT_GetDefaultClinicCtaHtml());
         $cta_block = $cta_html !== '' ? '<div class="watch-about-clinic-cta">' . $cta_html . '</div>' : '';
         $long = mb_strlen(strip_tags($seo_summary), 'UTF-8') > 520;
         $expand = $long
@@ -490,7 +500,7 @@ function PT_BuildWatchAboutVideoHtml($seo_summary, $fallback_markup = '') {
     return '';
 }
 
-function PT_BuildWatchTranscriptSectionHtml($video, $row) {
+function PT_BuildWatchTranscriptSectionHtml($video, $row, $expanded = false) {
     $has_transcript = !empty($row) && PT_DbVal($row, 'status') === 'completed' && !empty(PT_DbVal($row, 'plain_text'));
     if (!$has_transcript) {
         return '';
@@ -508,14 +518,16 @@ function PT_BuildWatchTranscriptSectionHtml($video, $row) {
     }
     return '<section class="watch-section watch-section-transcript">'
         . '<h3 class="watch-section-heading">Transcript</h3>'
-        . '<button type="button" class="watch-transcript-toggle" aria-expanded="false" aria-controls="watch-transcript-panel">Show Full Transcript</button>'
-        . '<div id="watch-transcript-panel" class="watch-transcript-panel" hidden>'
+        . ($expanded ? '' : '<button type="button" class="watch-transcript-toggle" aria-expanded="false" aria-controls="watch-transcript-panel">Show Full Transcript</button>')
+        . '<div id="watch-transcript-panel" class="watch-transcript-panel"' . ($expanded ? '' : ' hidden') . '>'
         . '<div class="watch-transcript-body">' . $body . '</div>'
         . '</div>'
         . '</section>';
 }
 
 function PT_BuildWatchDescriptionTabsHtml($video) {
+    global $pt;
+    $compact = ($pt->theme_using ?? $pt->config->theme ?? '') === 'youplay' && empty($video->is_movie);
     $row = !empty($video->transcript_row) ? $video->transcript_row : PT_GetVideoTranscript($video->id);
     $seo_summary = PT_DbVal($row, 'seo_summary', '');
     $takeaways = array();
@@ -530,27 +542,39 @@ function PT_BuildWatchDescriptionTabsHtml($video) {
         $fallback_markup = $video->markup_description;
     }
 
-    $transcript = PT_BuildWatchTranscriptSectionHtml($video, $row);
+    $transcript = PT_BuildWatchTranscriptSectionHtml($video, $row, $compact);
     $wrapper_class = 'watch-content-below-video';
     if ($transcript === '') {
         $wrapper_class .= ' watch-content-below-video--no-transcript';
     }
-    $parts = array('<div class="' . $wrapper_class . '">');
-    $parts[] = PT_BuildWatchPrimaryCtaHtml();
-    if ($has_takeaways) {
-        $takeaways_html = PT_BuildWatchKeyTakeawaysHtml($takeaways);
-        if ($takeaways_html !== '') {
-            $parts[] = $takeaways_html;
+    $takeaways_html = $has_takeaways ? PT_BuildWatchKeyTakeawaysHtml($takeaways, $compact) : '';
+    $about = PT_BuildWatchAboutVideoHtml($seo_summary, $fallback_markup, $compact);
+    if ($compact) {
+        // Both offers keep their independent admin copy, URL fallback and HTML overrides.
+        // The secondary is moved (never cloned) to the visible related-video column by JS.
+        $overview = $takeaways_html;
+        if ($about !== '') {
+            $overview .= '<details class="watch-about-disclosure"><summary>About this video</summary>' . $about . '</details>';
         }
+        if ($overview === '') {
+            $overview = '<p class="watch-overview-empty">Watch the video above. An overview is not available for this video yet.</p>';
+        }
+        $parts = array('<div class="' . $wrapper_class . ' watch-content-modern" data-watch-content>');
+        if ($transcript !== '') {
+            // Without JavaScript these remain ordinary links to fully readable sections.
+            $parts[] = '<nav class="watch-content-tabs" aria-label="Video information">'
+                . '<a id="watch-overview-tab" href="#watch-overview" data-watch-tab="overview">Overview</a>'
+                . '<a id="watch-transcript-tab" href="#watch-transcript" data-watch-tab="transcript">Transcript</a></nav>';
+        }
+        $parts[] = '<div id="watch-overview" class="watch-tab-panel" data-watch-panel="overview">' . $overview . '</div>';
+        if ($transcript !== '') {
+            $parts[] = '<div id="watch-transcript" class="watch-tab-panel" data-watch-panel="transcript">' . $transcript . '</div>';
+        }
+        $parts[] = '<div class="watch-primary-cta-slot">' . PT_BuildWatchPrimaryCtaHtml() . '</div>';
+        $parts[] = '<div class="watch-secondary-cta-origin"><div data-watch-secondary>' . PT_BuildWatchSecondaryCtaHtml() . '</div></div>';
+    } else {
+        $parts = array('<div class="' . $wrapper_class . '">', PT_BuildWatchPrimaryCtaHtml(), $takeaways_html, $about, $transcript, PT_BuildWatchSecondaryCtaHtml());
     }
-    $about = PT_BuildWatchAboutVideoHtml($seo_summary, $fallback_markup);
-    if ($about !== '') {
-        $parts[] = $about;
-    }
-    if ($transcript !== '') {
-        $parts[] = $transcript;
-    }
-    $parts[] = PT_BuildWatchSecondaryCtaHtml();
     $parts[] = '</div>';
     return implode("\n", $parts);
 }

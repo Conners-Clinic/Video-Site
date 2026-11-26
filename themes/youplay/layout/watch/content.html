@@ -6,9 +6,12 @@
       }
    </style>
 <?php } ?>
-<div class="top-video video-player-page six_padding_15" id="padding_15">
+<div class="top-video video-player-page six_padding_15<?php echo !$pt->is_movie ? ' cc-watch' : ''; ?><?php echo ($pt->is_wl || $pt->is_list) ? ' cc-watch-playlist' : ''; ?>" id="padding_15">
+   <?php if (!$pt->is_movie) { ?>
+   <nav class="cc-watch-breadcrumb" aria-label="Breadcrumb"><a href="{{LINK }}" data-load="?link1=home">Video library</a><span aria-hidden="true">/</span><a href="{{LINK videos/category/{{CATEGORY_ID}}}}" data-load="?link1=videos&page=category&id={{CATEGORY_ID}}">{{CATEGORY}}</a></nav>
+   <?php } ?>
    <div class="row">
-      <div class="<?php echo(($pt->is_wl || $pt->is_list) ? 'play-list-player' : '') ?>">
+      <div class="watch-stage <?php echo(($pt->is_wl || $pt->is_list) ? 'play-list-player' : '') ?>">
          <div class="col-md-<?php echo($pt->is_movie ? '12' : '8') ?> player-video yp_pub_elemnt <?php echo($pt->is_movie ? 'movie' : '') ?>">
             <?php if (!$pt->is_movie) { ?>
             <div class="watch-player-shell">
@@ -515,6 +518,7 @@
                </div>
             </div>
             <?php } ?>
+            <div data-watch-secondary-target="desktop"></div>
             <?php } ?>
             <?php if($pt->is_wl || $pt->is_list){ ?>
                   <div class="content play-list-container">
@@ -545,7 +549,7 @@
          <?php } ?>
       </div>
       <?php if (!$pt->is_movie) { ?>
-      <div class="col-md-8 ">
+      <div class="col-md-8 watch-main-column">
          <div class="content pt_shadow">
             <div class="video-title pt_video_info watch-meta-bar">
                <input type="hidden" value="{{ID}}" id="video-id">
@@ -576,7 +580,7 @@
                   <div class="watch-meta-toolbar">
                      <?php if (($pt->config->sell_videos_system == 'on') || $pt->get_video->sell_video == 0 ) { ?>
                      <div class="video-likes">
-                        <div class="like-btn {{LIKE_ACTIVE_CLASS}}" id="likes-bar" onclick="Wo_LikeSystem('{{ID}}', 'like', this, 'is_ajax')" data-likes="{{RAEL_LIKES}}" {{ISLIKED}}>
+                        <div class="like-btn {{LIKE_ACTIVE_CLASS}}" id="likes-bar" role="button" tabindex="0" aria-label="{{LANG like}}" onclick="Wo_LikeSystem('{{ID}}', 'like', this, 'is_ajax')" data-likes="{{RAEL_LIKES}}" {{ISLIKED}}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" class="thumbs_up">
                            <path fill="currentColor" d="M9 21h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.58 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2zM9 9l4.34-4.34L12 10h9v2l-3 7H9V9zM1 9h4v12H1z" />
                         </svg>
@@ -587,7 +591,7 @@
                         <div class="views-bar blue" style="width: {{LIKES_P}}%"></div>
                         <div class="clear"></div>
                      </div>
-                     <div class="like-btn {{DIS_ACTIVE_CLASS}}" id="dislikes-bar" onclick="Wo_LikeSystem('{{ID}}', 'dislike', this, 'is_ajax')" data-likes="{{RAEL_DISLIKES}}" {{ISDISLIKED}}>
+                     <div class="like-btn {{DIS_ACTIVE_CLASS}}" id="dislikes-bar" role="button" tabindex="0" aria-label="{{LANG dislike}}" onclick="Wo_LikeSystem('{{ID}}', 'dislike', this, 'is_ajax')" data-likes="{{RAEL_DISLIKES}}" {{ISDISLIKED}}>
                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" class="thumbs_down">
                         <path fill="currentColor" d="M15 3H6c-.83 0-1.54.5-1.84-1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm0 12l-4.34 4.34L12 14H3v-2l3-7h9v10zm4-12h4v12h-4z" />
                      </svg>
@@ -601,6 +605,9 @@
                               <path fill="currentColor" d="M21,11L14,4V8C7,9 4,14 3,19C5.5,15.5 9,13.9 14,13.9V18L21,11Z" />
                            </svg>
                         </button>
+                        <details class="cc-watch-more">
+                           <summary aria-label="More video actions" title="More video actions"><span aria-hidden="true">&#8943;</span></summary>
+                           <div class="cc-watch-more-menu">
                         <?php if (empty($pt->get_video->stream_name)) { ?>
                         <?php if ($pt->config->embed_system == 'on' && $pt->get_video->embedding == 0) {?>
                         <?php if ($pt->get_video->sell_video == 0) { ?>
@@ -608,7 +615,7 @@
                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                               <path fill="currentColor" d="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z" />
                            </svg>
-                        </button>
+                         <span>{{LANG embed}}</span></button>
                         <?php } ?>
                         <?php } } ?>
                         <?php if (empty($pt->get_video->stream_name)) { ?>
@@ -621,34 +628,10 @@
                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                               <path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
                            </svg>
-                        </button>
+                         <span>{{LANG download}}</span></button>
                         <?php } } } ?>
                         <?php } ?>
                         <?php } ?>
-                     </div>
-                  </div>
-               </div>
-         </div>
-         <?php if ($pt->get_video->sell_video > 0 && PT_IsAdmin()) { ?>
-         <br>
-         <div class="alert alert-danger">
-            <span>{{LANG admin_can_see}}</span>
-            <br>
-            <?php if (!empty($pt->get_video->main_video_price)) { ?>
-            {{LANG video_price}} {{CURRENCY}}<?php echo $pt->get_video->main_video_price; ?>
-            <?php } ?>
-            <?php if (!empty($pt->get_video->rent_price)) { ?>
-            <br>
-            {{LANG video_rent_price}} {{CURRENCY}}<?php echo $pt->get_video->rent_price; ?>
-            <?php } ?>
-         </div>
-         <?php } ?>
-         <?php if (!empty($pt->video_end)) { ?>
-         <br>
-         <div class="alert alert-danger">
-            <span>{{LANG rent_time_will}} : <?php echo $pt->video_end; ?></span>
-         </div>
-         <?php } ?>
          <div class="video-options watch-secondary-actions">
             <?php if ($pt->get_video->is_owner == true) { ?>
             <a class="btn btn-share" href="{{LINK edit-video/{{ID}}}}" data-load="?link1=edit-video&id=category&id={{ID}}">
@@ -709,6 +692,32 @@
             </a>
             <?php } ?>
          </div>
+                           </div>
+                        </details>
+                     </div>
+                  </div>
+               </div>
+         </div>
+         <?php if ($pt->get_video->sell_video > 0 && PT_IsAdmin()) { ?>
+         <br>
+         <div class="alert alert-danger">
+            <span>{{LANG admin_can_see}}</span>
+            <br>
+            <?php if (!empty($pt->get_video->main_video_price)) { ?>
+            {{LANG video_price}} {{CURRENCY}}<?php echo $pt->get_video->main_video_price; ?>
+            <?php } ?>
+            <?php if (!empty($pt->get_video->rent_price)) { ?>
+            <br>
+            {{LANG video_rent_price}} {{CURRENCY}}<?php echo $pt->get_video->rent_price; ?>
+            <?php } ?>
+         </div>
+         <?php } ?>
+         <?php if (!empty($pt->video_end)) { ?>
+         <br>
+         <div class="alert alert-danger">
+            <span>{{LANG rent_time_will}} : <?php echo $pt->video_end; ?></span>
+         </div>
+         <?php } ?>
          <div class="publisher-element watch-channel-compact">
             <div class="publisher-avatar pull-left hide-in-mobile-720">
                <a href="{{USER url}}" data-load="?link1=timeline&id={{USER username}}"><img src="{{USER avatar}}" alt="{{USER name}}"></a>
@@ -1003,7 +1012,9 @@
       <?php } ?>
       <div class="ads-placment">{{COMMENT_AD}}</div>
       <?php if (($pt->config->sell_videos_system == 'on') || $pt->get_video->sell_video == 0 ) { ?>
+      <?php if (!$pt->is_movie) { ?><details class="cc-comments"><summary>{{LANG comments}} (<?php echo (int) $pt->count_comments; ?>)</summary><?php } ?>
       {{VIDEO_COMMENTS}}
+      <?php if (!$pt->is_movie) { ?></details><?php } ?>
       <?php }  ?>
    </div>
 </div>
@@ -1065,6 +1076,7 @@
             </div>
          </div>
    <?php } ?>
+   <?php if (!$pt->is_movie) { ?><div data-watch-secondary-target="mobile"></div><?php } ?>
 </div>
 <div class="clear"></div>
 </div>
