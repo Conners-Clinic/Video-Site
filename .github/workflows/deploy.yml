@@ -45,6 +45,7 @@ jobs:
             exit 1
           fi
 
-          GIT_TERMINAL_PROMPT=0 git pull --ff-only https://github.com/Conners-Clinic/Video-Site.git main
+          export GIT_TERMINAL_PROMPT=0
+          git fetch origin main && git reset --hard origin/main || exit 1
           echo "Deployed $(git log -1 --oneline)"
           REMOTE
