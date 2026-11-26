@@ -2,11 +2,11 @@
 id: ws_3twevc2j
 title: Video library redesign
 plans: []
-branch: codex/video-library-redesign
+branch: codex/video-library-mobile-fixes
 status: active
 opened_at: 2026-11-25
-last_activity_at: "2026-11-26T02:36:08Z"
-latest_checkpoint: 01M8AVBNE666EDTTHJJ9SW3C73
-next_step: "Review PR #7. After an authorized merge to main, smoke-test the deployed test site with actual playback, signed-in actions, navigation and both configured CTAs before any production promotion."
+last_activity_at: "2026-11-26T05:04:40Z"
+latest_checkpoint: 01M8B3VMH917YJMZHEZ0HYYS3X
+next_step: "Review PR #8. After an authorized merge to main, smoke-test the deployed test site on mobile with actual playback, signed-in upload navigation, and both configured CTAs."
 ---
 Free-form notes the agent may append; never required.
