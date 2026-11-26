@@ -527,7 +527,8 @@ function PT_BuildWatchTranscriptSectionHtml($video, $row, $expanded = false) {
 
 function PT_BuildWatchDescriptionTabsHtml($video) {
     global $pt;
-    $compact = ($pt->theme_using ?? $pt->config->theme ?? '') === 'youplay' && empty($video->is_movie);
+    // The theme's fonts/info.json reports 'default'; use the actual configured folder.
+    $compact = ($pt->config->theme ?? $pt->theme_using ?? '') === 'youplay' && empty($video->is_movie);
     $row = !empty($video->transcript_row) ? $video->transcript_row : PT_GetVideoTranscript($video->id);
     $seo_summary = PT_DbVal($row, 'seo_summary', '');
     $takeaways = array();
@@ -566,11 +567,11 @@ function PT_BuildWatchDescriptionTabsHtml($video) {
                 . '<a id="watch-overview-tab" href="#watch-overview" data-watch-tab="overview">Overview</a>'
                 . '<a id="watch-transcript-tab" href="#watch-transcript" data-watch-tab="transcript">Transcript</a></nav>';
         }
+        $parts[] = '<div class="watch-primary-cta-slot">' . PT_BuildWatchPrimaryCtaHtml() . '</div>';
         $parts[] = '<div id="watch-overview" class="watch-tab-panel" data-watch-panel="overview">' . $overview . '</div>';
         if ($transcript !== '') {
             $parts[] = '<div id="watch-transcript" class="watch-tab-panel" data-watch-panel="transcript">' . $transcript . '</div>';
         }
-        $parts[] = '<div class="watch-primary-cta-slot">' . PT_BuildWatchPrimaryCtaHtml() . '</div>';
         $parts[] = '<div class="watch-secondary-cta-origin"><div data-watch-secondary>' . PT_BuildWatchSecondaryCtaHtml() . '</div></div>';
     } else {
         $parts = array('<div class="' . $wrapper_class . '">', PT_BuildWatchPrimaryCtaHtml(), $takeaways_html, $about, $transcript, PT_BuildWatchSecondaryCtaHtml());

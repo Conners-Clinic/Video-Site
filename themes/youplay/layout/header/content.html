@@ -5,7 +5,7 @@
 
 		 ?>
 			<div class="yp_slide_menu">
-				<span id="open_slide" class="slide-toggle-btn<?php if(!empty($_COOKIE['open_slide']) && $_COOKIE['open_slide'] == 'yes'){ ?> is-sidebar-open<?php } ?>" title="{{LANG expand}}" data-toggle="tooltip" data-placement="bottom" onclick="<?php if(!empty($_COOKIE['open_slide']) && $_COOKIE['open_slide'] == 'yes'){ ?>SlideEraseCookie('open_slide')<?php }else{ ?>SlideSetCookie('open_slide','yes',1);<?php } ?>">
+				<button type="button" id="open_slide" class="slide-toggle-btn" aria-label="Open menu" aria-expanded="false" aria-controls="site-sidebar" title="Open menu">
 					<svg class="slide-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/>
 						<line x1="8" y1="3.5" x2="8" y2="20.5"/>
@@ -16,7 +16,7 @@
 							<polyline points="14.5 9 11.5 12 14.5 15"/>
 						</g>
 					</svg>
-				</span>
+				</button>
 			</div>
 		<?php } ?>
 		<a class="navbar-brand logo-img" href="{{LINK }}" itemprop="url">
@@ -245,31 +245,6 @@ $('.search-icon').on('click', function(event) {
 	event.preventDefault();
 	$('.search-bar').toggleClass('hidden');
 });
-
-function ptSyncSidebarToggleIcon() {
-	var isOpen = $('body').hasClass('side_open') || $('body').hasClass('mobi_side_open');
-	$('#open_slide').toggleClass('is-sidebar-open', isOpen);
-}
-
-$('#open_slide').on('click', function(event) {
-	event.preventDefault();
-	$('body').toggleClass('side_open');
-	ptSyncSidebarToggleIcon();
-});
-
-current_width = $(window).width();
-if(current_width <= 1251) {
-    $('#open_slide').on('click', function(event) {
-		$('body').toggleClass('mobi_side_open');
-		ptSyncSidebarToggleIcon();
-	});
-}
-
-ptSyncSidebarToggleIcon();
-
-//$('.sidenav-overlay').on('click', function() {
-//	$('body').removeClass('side_open');
-//});
 
 $('#search-bar').keyup(function(event) {
 	var search_value = $(this).val();

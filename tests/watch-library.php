@@ -14,7 +14,8 @@ function watch_fixture($takeaways = null, $status = 'completed') {
         'seo_summary' => 'A short overview.', 'key_takeaways' => json_encode($takeaways ?? array('First point', 'Second point', 'Third point', 'Fourth point')),
     ));
 }
-$pt->theme_using = 'youplay';
+$pt->theme_using = json_decode(file_get_contents(dirname(__DIR__) . '/themes/youplay/fonts/info.json'), true)['name'];
+$pt->config->theme = 'youplay';
 $pt->config->watch_cta_headline = 'Primary offer';
 $pt->config->watch_cta_button_text = 'Explore primary';
 $pt->config->watch_cta_button_url = 'https://example.test/primary?source=video&offer=one';
@@ -22,6 +23,8 @@ $pt->config->watch_cta2_headline = 'Secondary offer';
 $pt->config->watch_cta2_button_text = 'Explore secondary';
 $pt->config->watch_cta2_button_url = 'https://example.test/secondary';
 $html = PT_BuildWatchDescriptionTabsHtml(watch_fixture());
+check(strpos($html, 'watch-content-modern') !== false, 'Configured youplay theme uses tabs even when its font metadata says default');
+check(strpos($html, 'watch-content-tabs') < strpos($html, 'watch-primary-cta-slot') && strpos($html, 'watch-primary-cta-slot') < strpos($html, 'id="watch-overview"'), 'Tabs precede the first CTA and selected information panel');
 check(strpos($html, 'Primary offer') !== false && strpos($html, 'Secondary offer') !== false, 'Both independent headlines render');
 check(strpos($html, 'Explore primary') !== false && strpos($html, 'Explore secondary') !== false, 'Both independent labels render');
 check(strpos($html, 'https://example.test/secondary') !== false && strpos($html, 'source=video&amp;offer=one') !== false, 'Distinct CTA URLs and query strings survive');
@@ -53,11 +56,13 @@ $video->markup_description = '';
 $html = PT_BuildWatchDescriptionTabsHtml($video);
 check(strpos($html, 'watch-overview-empty') !== false && strpos($html, 'custom-secondary') !== false, 'Empty video information still keeps both offers');
 $pt->theme_using = 'default';
+$pt->config->theme = 'default';
 $html = PT_BuildWatchDescriptionTabsHtml(watch_fixture());
 check(strpos($html, 'data-watch-tab') === false && strpos($html, 'watch-about-clinic-cta') !== false, 'Other themes retain their original presentation');
 check(strpos($html, 'watch-transcript-panel" hidden') !== false, 'Other themes retain their transcript toggle');
 check(strpos(PT_BuildWatchKeyTakeawaysHtml($many), '<details') === false, 'Other themes still show every takeaway immediately');
 $pt->theme_using = 'youplay';
+$pt->config->theme = 'youplay';
 $movie = watch_fixture(); $movie->is_movie = 1;
 check(strpos(PT_BuildWatchDescriptionTabsHtml($movie), 'watch-content-modern') === false, 'Movie pages keep their existing layout');
 echo "$checks watch-library assertions passed\n";
