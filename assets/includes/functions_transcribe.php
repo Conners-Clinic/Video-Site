@@ -567,11 +567,11 @@ function PT_BuildWatchDescriptionTabsHtml($video) {
                 . '<a id="watch-overview-tab" href="#watch-overview" data-watch-tab="overview">Overview</a>'
                 . '<a id="watch-transcript-tab" href="#watch-transcript" data-watch-tab="transcript">Transcript</a></nav>';
         }
-        $parts[] = '<div class="watch-primary-cta-slot">' . PT_BuildWatchPrimaryCtaHtml() . '</div>';
         $parts[] = '<div id="watch-overview" class="watch-tab-panel" data-watch-panel="overview">' . $overview . '</div>';
         if ($transcript !== '') {
             $parts[] = '<div id="watch-transcript" class="watch-tab-panel" data-watch-panel="transcript">' . $transcript . '</div>';
         }
+        $parts[] = '<div class="watch-primary-cta-slot">' . PT_BuildWatchPrimaryCtaHtml() . '</div>';
         $parts[] = '<div class="watch-secondary-cta-origin"><div data-watch-secondary>' . PT_BuildWatchSecondaryCtaHtml() . '</div></div>';
     } else {
         $parts = array('<div class="' . $wrapper_class . '">', PT_BuildWatchPrimaryCtaHtml(), $takeaways_html, $about, $transcript, PT_BuildWatchSecondaryCtaHtml());
