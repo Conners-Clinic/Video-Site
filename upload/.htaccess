@@ -2,4 +2,4 @@ RewriteEngine On
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ https://videos.connersclinic.com%{REQUEST_URI} [R=301,L,QSA]
+RewriteRule ^ https://cdn.connersclinic.com%{REQUEST_URI} [R=301,L,QSA]
