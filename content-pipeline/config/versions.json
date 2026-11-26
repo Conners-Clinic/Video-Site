@@ -1,0 +1,19 @@
+{
+  "prompts": {
+    "pass-0-clean-transcript": 1,
+    "entity-extraction": 1,
+    "entity-comparison": 1,
+    "entity-auto-merge": 1,
+    "entity-review-queue": 1,
+    "pass-1-seo-blueprint": 1,
+    "pass-2-blog-article": 1,
+    "pass-3-seo-audit": 1,
+    "pass-4-final-revision": 1
+  },
+  "standards": {
+    "brand-standards": 1,
+    "medical-terminology-standards": 1,
+    "seo-standards": 1,
+    "entity-library": 1
+  }
+}

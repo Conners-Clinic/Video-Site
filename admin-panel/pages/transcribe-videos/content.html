@@ -1,0 +1,593 @@
+<div class="container-fluid">
+    <div>
+        <h3>Transcribe Videos</h3>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="#">Admin Panel</a></li>
+                <li class="breadcrumb-item"><a href="#">Tools</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Transcribe Videos</li>
+            </ol>
+        </nav>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">System settings</h6>
+                    <div class="transcribe-settings-alert"></div>
+                    <form id="transcribe-settings-form">
+                        <div class="form-group">
+                            <label>Transcription system</label>
+                            <select class="form-control" name="transcript_system">
+                                <option value="off" <?php echo ($pt->config->transcript_system != 'on') ? 'selected' : ''; ?>>Off</option>
+                                <option value="on" <?php echo ($pt->config->transcript_system == 'on') ? 'selected' : ''; ?>>On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Python command</label>
+                            <input type="text" class="form-control" name="whisper_command" value="<?php echo htmlspecialchars($pt->config->whisper_command ?? 'python3'); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Whisper script path (relative to site root)</label>
+                            <input type="text" class="form-control" name="whisper_script" value="<?php echo htmlspecialchars($pt->config->whisper_script ?? 'scripts/transcribe_whisper.py'); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <input type="text" class="form-control" name="whisper_model" value="<?php echo htmlspecialchars($pt->config->whisper_model ?? 'base'); ?>" placeholder="tiny, base, small, medium">
+                        </div>
+                        <div class="form-group">
+                            <label>Language</label>
+                            <input type="text" class="form-control" name="transcript_language" value="<?php echo htmlspecialchars($pt->config->transcript_language ?? 'en'); ?>" placeholder="en or auto">
+                        </div>
+                        <div class="form-group">
+                            <label>Jobs per cron run</label>
+                            <input type="number" class="form-control" name="transcript_queue_count" min="1" max="5" value="<?php echo (int) ($pt->config->transcript_queue_count ?? 1); ?>">
+                            <small class="text-muted">Processed one after another per cron hit (not parallel). Raise only if the server has CPU/RAM headroom.</small>
+                        </div>
+                        <hr>
+                        <h6>Server load alerts</h6>
+                        <div class="form-group">
+                            <label>Email alerts when CPU load is high</label>
+                            <select class="form-control" name="transcript_load_monitor">
+                                <option value="on" <?php echo (($pt->config->transcript_load_monitor ?? 'on') == 'on') ? 'selected' : ''; ?>>On</option>
+                                <option value="off" <?php echo (($pt->config->transcript_load_monitor ?? 'on') != 'on') ? 'selected' : ''; ?>>Off</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Alert email (blank = site email)</label>
+                            <input type="email" class="form-control" name="transcript_load_alert_email" value="<?php echo htmlspecialchars($pt->config->transcript_load_alert_email ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Warning: load per CPU ≥</label>
+                            <input type="number" step="0.05" min="0.3" max="3" class="form-control" name="transcript_load_warn_per_cpu" value="<?php echo htmlspecialchars($pt->config->transcript_load_warn_per_cpu ?? '0.85'); ?>">
+                            <small class="text-muted">1.0 ≈ one core fully busy on average (1 min load ÷ CPU count).</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Critical: load per CPU ≥</label>
+                            <input type="number" step="0.05" min="0.5" max="5" class="form-control" name="transcript_load_crit_per_cpu" value="<?php echo htmlspecialchars($pt->config->transcript_load_crit_per_cpu ?? '1.25'); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Min minutes between alert emails</label>
+                            <input type="number" class="form-control" name="transcript_load_email_cooldown" min="5" max="1440" value="<?php echo (int) (($pt->config->transcript_load_email_cooldown ?? 3600) / 60); ?>">
+                            <small class="text-muted">Stored as seconds (value × 60 on save).</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Dashboard refresh (seconds)</label>
+                            <input type="number" class="form-control" name="transcript_load_poll_seconds" min="15" max="120" value="<?php echo (int) ($pt->config->transcript_load_poll_seconds ?? 30); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Max video duration (seconds, 0 = no limit)</label>
+                            <input type="number" class="form-control" name="transcript_max_duration" value="<?php echo (int) ($pt->config->transcript_max_duration ?? 7200); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Channel usernames (comma-separated, always shown in batch dropdown)</label>
+                            <input type="text" class="form-control" name="transcript_channel_usernames" value="<?php echo htmlspecialchars($pt->config->transcript_channel_usernames ?? 'DrKevinConners,ConnersClinic'); ?>" placeholder="DrKevinConners,ConnersClinic">
+                        </div>
+                        <hr>
+                        <h6>SEO summary (OpenAI)</h6>
+                        <div class="form-group">
+                            <label>OpenAI API key</label>
+                            <input type="password" class="form-control" name="openai_api_key" value="<?php echo htmlspecialchars($pt->config->openai_api_key ?? ''); ?>" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label>Summary &amp; takeaways model</label>
+                            <input type="text" class="form-control" name="seo_pipeline_model_summary" value="<?php echo htmlspecialchars(PT_AiStageModel('summary')); ?>">
+                            <small class="text-muted">Default comes from content-pipeline/config/pipeline-models.json. Other stages are set under SEO Articles &rarr; Settings. The old single "OpenAI model" setting is no longer used.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Long-transcript section model</label>
+                            <input type="text" class="form-control" name="seo_pipeline_model_summary_sections" value="<?php echo htmlspecialchars(PT_AiStageModel('summary_sections')); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Rewrite video descriptions automatically after transcription?</label>
+                            <select class="form-control" name="transcript_auto_apply_description">
+                                <option value="off"<?php echo (($pt->config->transcript_auto_apply_description ?? 'off') === 'on') ? '' : ' selected'; ?>>Off (recommended): only via "Apply descriptions"</option>
+                                <option value="on"<?php echo (($pt->config->transcript_auto_apply_description ?? 'off') === 'on') ? ' selected' : ''; ?>>On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Custom system prompt (optional)</label>
+                            <textarea class="form-control" name="openai_summary_prompt" rows="3"><?php echo htmlspecialchars($pt->config->openai_summary_prompt ?? ''); ?></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Video description mode</label>
+                            <select class="form-control" name="transcript_description_mode">
+                                <?php
+                                $desc_mode = $pt->config->transcript_description_mode ?? 'replace_description';
+                                foreach (array('replace_description' => 'Replace description with summary + CTA', 'append_summary' => 'Prepend summary + CTA to existing description', 'display_only' => 'Display only (do not change database description)') as $val => $label) {
+                                    echo '<option value="' . $val . '"' . ($desc_mode == $val ? ' selected' : '') . '>' . htmlspecialchars($label) . '</option>';
+                                }
+                                ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Clinic CTA (HTML)</label>
+                            <small class="text-muted d-block m-b-5">Used in video descriptions when transcripts update the database (not the watch-page card below).</small>
+                            <textarea class="form-control" name="clinic_cta_html" rows="10"><?php
+                            $cta_val = !empty($pt->config->clinic_cta_html) ? $pt->config->clinic_cta_html : PT_GetClinicCtaHtmlDefault();
+                            echo htmlspecialchars($cta_val);
+                            ?></textarea>
+                        </div>
+                        <hr>
+                        <h6>Watch page — top CTA strip</h6>
+                        <p class="text-muted">Slim strip below title/metadata on every watch page. Leave HTML override empty to use the fields below.</p>
+                        <?php $watch_cta_defaults = PT_GetWatchCtaDefaults(); ?>
+                        <div class="form-group">
+                            <label>Eyebrow</label>
+                            <small class="text-muted d-block m-b-5">Small pill label above the headline (shown in all caps).</small>
+                            <input type="text" class="form-control" name="watch_cta_eyebrow" value="<?php echo htmlspecialchars($pt->config->watch_cta_eyebrow ?? $watch_cta_defaults['eyebrow']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Headline</label>
+                            <input type="text" class="form-control" name="watch_cta_headline" value="<?php echo htmlspecialchars($pt->config->watch_cta_headline ?? $watch_cta_defaults['headline']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Body</label>
+                            <textarea class="form-control" name="watch_cta_body" rows="3"><?php echo htmlspecialchars($pt->config->watch_cta_body ?? $watch_cta_defaults['body']); ?></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Button text</label>
+                            <input type="text" class="form-control" name="watch_cta_button_text" value="<?php echo htmlspecialchars($pt->config->watch_cta_button_text ?? $watch_cta_defaults['button_text']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Button URL</label>
+                            <input type="url" class="form-control" name="watch_cta_button_url" value="<?php echo htmlspecialchars($pt->config->watch_cta_button_url ?? $watch_cta_defaults['button_url']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Top strip HTML override (optional)</label>
+                            <small class="text-muted d-block m-b-5">Must be HTML (include &lt;a&gt; tags for buttons). Plain text is ignored and the fields above are used instead.</small>
+                            <textarea class="form-control" name="watch_page_cta_html" rows="4"><?php echo htmlspecialchars($pt->config->watch_page_cta_html ?? ''); ?></textarea>
+                        </div>
+                        <hr>
+                        <h6>Watch page — secondary CTA</h6>
+                        <p class="text-muted">Shown after the transcript, before comments.</p>
+                        <?php $watch_cta2_defaults = PT_GetWatchSecondaryCtaDefaults(); ?>
+                        <div class="form-group">
+                            <label>Eyebrow</label>
+                            <small class="text-muted d-block m-b-5">Small pill label above the headline (shown in all caps).</small>
+                            <input type="text" class="form-control" name="watch_cta2_eyebrow" value="<?php echo htmlspecialchars($pt->config->watch_cta2_eyebrow ?? $watch_cta2_defaults['eyebrow']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Headline</label>
+                            <input type="text" class="form-control" name="watch_cta2_headline" value="<?php echo htmlspecialchars($pt->config->watch_cta2_headline ?? $watch_cta2_defaults['headline']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Body</label>
+                            <textarea class="form-control" name="watch_cta2_body" rows="3"><?php echo htmlspecialchars($pt->config->watch_cta2_body ?? $watch_cta2_defaults['body']); ?></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Button text</label>
+                            <input type="text" class="form-control" name="watch_cta2_button_text" value="<?php echo htmlspecialchars($pt->config->watch_cta2_button_text ?? $watch_cta2_defaults['button_text']); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Button URL (optional — uses top CTA URL if empty)</label>
+                            <input type="url" class="form-control" name="watch_cta2_button_url" value="<?php echo htmlspecialchars($pt->config->watch_cta2_button_url ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Secondary CTA HTML override (optional)</label>
+                            <textarea class="form-control" name="watch_page_cta2_html" rows="4"><?php echo htmlspecialchars($pt->config->watch_page_cta2_html ?? ''); ?></textarea>
+                            <small class="text-muted d-block m-t-5">Must be HTML. Plain text is ignored; the fields above are used instead.</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save settings</button>
+                        <button type="button" class="btn btn-default m-l-10" id="test-openai-btn">Test OpenAI</button>
+                    </form>
+                    <div class="alert alert-info m-t-20">
+                        Install on the server: <code>pip install faster-whisper</code> (same interpreter as <strong>Python command</strong> above, e.g. <code>python3.13 -m pip install faster-whisper</code>).<br>
+                        Cron (add to server crontab):
+                        <p class="m-t-10 m-b-0"><code>*/2 * * * * curl -s "https://test-videos.connersclinic.com/transcribe-cron.php" &gt; /dev/null 2&gt;&amp;1</code></p>
+                        <small class="text-muted">If a run is still processing when the next cron fires, another batch may start (separate PHP processes). Use a slower interval or fewer jobs per run if CPU spikes.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Batch by channel</h6>
+                    <p class="text-muted">Select a channel owner. Batch transcription processes <strong>uploaded</strong> videos on that channel (not YouTube/Vimeo imports). Counts match videos listed on the channel page.</p>
+                    <div class="transcribe-batch-alert"></div>
+                    <label for="channel_id">Channel</label>
+                    <select class="form-control show-tick" id="channel_id" name="channel_id">
+                        <option value="">— Select channel —</option>
+                        <?php
+                        $channels = PT_GetTranscriptChannels(array('purpose' => 'batch'));
+                        if (!empty($channels)) {
+                            foreach ($channels as $ch) {
+                                echo '<option value="' . (int) $ch->id . '">' . htmlspecialchars(PT_FormatTranscriptChannelLabel($ch, 'batch')) . '</option>';
+                            }
+                        }
+                        ?>
+                    </select>
+                    <br>
+                    <label for="batch_limit">Batch size</label>
+                    <select class="form-control" id="batch_limit">
+                        <option value="10">10 videos</option>
+                        <option value="25">25 videos</option>
+                        <option value="50">50 videos</option>
+                        <option value="all">All eligible</option>
+                    </select>
+                    <br>
+                    <label for="selected_time">Video date (optional)</label>
+                    <select class="form-control" id="selected_time">
+                        <option value="all">All time</option>
+                        <option value="today">Today</option>
+                        <option value="this_week">This week (Sat–Fri)</option>
+                        <option value="this_month">This month</option>
+                        <option value="this_year">This year</option>
+                    </select>
+                    <br>
+                    <label><input type="checkbox" id="skip_completed" checked> Skip already transcribed</label><br>
+                    <label><input type="checkbox" id="failed_only"> Re-queue failed only</label>
+                    <br><br>
+                    <button type="button" class="btn btn-success" id="enqueue-btn">Enqueue batch</button>
+                    <button type="button" class="btn btn-default m-l-10" id="refresh-status-btn">Refresh status</button>
+                    <button type="button" class="btn btn-warning m-l-10" id="reconcile-stuck-btn">Fix stuck processing</button>
+                    <br><br>
+                    <label for="seo_batch_limit">SEO batch limit</label>
+                    <select class="form-control" id="seo_batch_limit">
+                        <option value="5">5 videos</option>
+                        <option value="10" selected>10 videos</option>
+                        <option value="25">25 videos</option>
+                    </select>
+                    <br>
+                    <button type="button" class="btn btn-warning" id="regenerate-seo-btn">Generate SEO summaries</button>
+                    <button type="button" class="btn btn-info m-l-10" id="apply-desc-btn">Apply descriptions (has summary)</button>
+                    <p class="text-muted m-t-10">Use after transcripts are completed. Requires OpenAI key. Does not re-run Whisper.</p>
+                    <hr>
+                    <label for="regen_one_video_id">Regenerate ONE video's summary (internal video ID)</label>
+                    <div class="form-inline">
+                        <input type="number" class="form-control" id="regen_one_video_id" min="1" placeholder="e.g. 123" style="width:140px">
+                        <label class="m-l-10"><input type="checkbox" id="regen_one_force"> replace existing summary</label>
+                        <button type="button" class="btn btn-warning m-l-10" id="regen-one-btn">Regenerate</button>
+                    </div>
+                    <p class="text-muted m-t-10">Uses the stored transcript only (no audio, no Whisper) and never changes the video description. Shows calls and estimated cost.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Server load (transcription)
+                        <span id="load-health-badge" class="label label-default m-l-10">—</span>
+                        <small class="text-muted pull-right" id="load-last-updated"></small>
+                    </h6>
+                    <div id="transcript-load-panel">
+                        <p class="text-muted">Loading…</p>
+                    </div>
+                    <button type="button" class="btn btn-default btn-sm" id="refresh-load-btn">Refresh now</button>
+                    <button type="button" class="btn btn-default btn-sm m-l-10" id="test-load-alert-btn">Send test alert email</button>
+                    <div class="transcribe-load-alert m-t-10"></div>
+                    <hr>
+                    <h6>Transcription cron</h6>
+                    <div id="transcript-cron-panel">
+                        <p class="text-muted">Loading cron status…</p>
+                    </div>
+                    <button type="button" class="btn btn-success btn-sm" id="run-cron-btn">Run cron now</button>
+                    <button type="button" class="btn btn-default btn-sm m-l-10" id="refresh-cron-btn">Refresh cron status</button>
+                    <p class="text-muted m-t-10"><small>Server crontab must call <code id="cron-url-hint">transcribe-cron.php</code> on a schedule. “Run cron now” processes up to your jobs-per-run limit from this browser (can take several minutes).</small></p>
+                    <div class="transcribe-cron-alert m-t-10"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Channel transcript status</h6>
+                    <div id="transcript-status-panel">
+                        <p class="text-muted">Select a channel and click Refresh status.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshTranscriptStatus() {
+    var channelId = $('#channel_id').val();
+    if (!channelId) {
+        $('#transcript-status-panel').html('<p class="text-warning">Select a channel first.</p>');
+        return;
+    }
+    $.get('{{LINK aj/ap/transcribe_status}}', { channel_id: channelId }, function(res) {
+        if (res.status != 200) {
+            $('#transcript-status-panel').html('<p class="text-danger">' + (res.message || 'Error') + '</p>');
+            return;
+        }
+        var c = res.counts || {};
+        var html = '<table class="table table-bordered"><tr><th>Pending</th><th>Queued</th><th>Processing</th><th>Completed</th><th>Failed</th><th>Skipped</th></tr>';
+        html += '<tr><td>' + (c.pending||0) + '</td><td>' + (c.queued||0) + '</td><td>' + (c.processing||0) + '</td><td>' + (c.completed||0) + '</td><td>' + (c.failed||0) + '</td><td>' + (c.skipped||0) + '</td></tr></table>';
+        if (res.recent && res.recent.length) {
+            html += '<h6>Recent issues</h6><ul>';
+            res.recent.forEach(function(r) {
+                html += '<li><strong>' + $('<div>').text(r.title).html() + '</strong> — ' + r.status;
+                if (r.error_message) html += ': ' + $('<div>').text(r.error_message).html();
+                html += '</li>';
+            });
+            html += '</ul>';
+        }
+        $('#transcript-status-panel').html(html);
+    }, 'json');
+}
+
+$('#transcribe-settings-form').on('submit', function(e) {
+    e.preventDefault();
+    $.post('{{LINK aj/ap/transcribe_settings}}', $(this).serialize(), function(res) {
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-settings-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+    }, 'json');
+});
+
+$('#enqueue-btn').on('click', function() {
+    var channelId = $('#channel_id').val();
+    if (!channelId) {
+        $('.transcribe-batch-alert').html('<div class="alert alert-warning">Select a channel.</div>');
+        return;
+    }
+    $('#enqueue-btn').prop('disabled', true).text('Enqueueing…');
+    $.post('{{LINK aj/ap/transcribe_enqueue}}', {
+        channel_id: channelId,
+        batch_limit: $('#batch_limit').val(),
+        selected_time: $('#selected_time').val(),
+        skip_completed: $('#skip_completed').is(':checked') ? 1 : 0,
+        failed_only: $('#failed_only').is(':checked') ? 1 : 0
+    }, function(res) {
+        $('#enqueue-btn').prop('disabled', false).text('Enqueue batch');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+        refreshTranscriptStatus();
+    }, 'json');
+});
+
+$('#refresh-status-btn').on('click', refreshTranscriptStatus);
+$('#channel_id').on('change', refreshTranscriptStatus);
+
+$('#reconcile-stuck-btn').on('click', function() {
+    var channelId = $('#channel_id').val();
+    if (!confirm('Mark stuck "processing" transcripts as completed when VTT/transcript data already exists?')) {
+        return;
+    }
+    $('#reconcile-stuck-btn').prop('disabled', true).text('Working…');
+    $.post('{{LINK aj/ap/transcribe_reconcile_stuck}}', {
+        channel_id: channelId || '',
+        run_seo: 1
+    }, function(res) {
+        $('#reconcile-stuck-btn').prop('disabled', false).text('Fix stuck processing');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+        refreshTranscriptStatus();
+    }, 'json');
+});
+
+$('#test-openai-btn').on('click', function() {
+    $.post('{{LINK aj/ap/transcribe_test_openai}}', {}, function(res) {
+        var cls = res.ok ? 'alert-success' : 'alert-danger';
+        $('.transcribe-settings-alert').html('<div class="alert ' + cls + '">' + (res.message || res.error || '') + '</div>');
+    }, 'json');
+});
+
+$('#regenerate-seo-btn').on('click', function() {
+    var channelId = $('#channel_id').val();
+    if (!channelId) {
+        $('.transcribe-batch-alert').html('<div class="alert alert-warning">Select a channel.</div>');
+        return;
+    }
+    $('#regenerate-seo-btn').prop('disabled', true).text('Working…');
+    $.post('{{LINK aj/ap/transcribe_regenerate_summaries}}', {
+        channel_id: channelId,
+        batch_limit: $('#seo_batch_limit').val()
+    }, function(res) {
+        $('#regenerate-seo-btn').prop('disabled', false).text('Generate SEO summaries');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+        refreshTranscriptStatus();
+    }, 'json');
+});
+
+$('#regen-one-btn').on('click', function() {
+    var vid = parseInt($('#regen_one_video_id').val(), 10);
+    if (!vid) {
+        $('.transcribe-batch-alert').html('<div class="alert alert-warning">Enter an internal video ID.</div>');
+        return;
+    }
+    var btn = $(this).prop('disabled', true).text('Working…');
+    $.post('{{LINK aj/ap/transcribe_regenerate_summary}}', {
+        video_id: vid,
+        force: $('#regen_one_force').is(':checked') ? 1 : 0
+    }, function(res) {
+        btn.prop('disabled', false).text('Regenerate');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        var html = $('<div>').text(res.message || '').html();
+        if (res.status == 200 && res.summary) {
+            html += '<br><strong>Summary:</strong> ' + $('<div>').text(res.summary).html();
+            if (res.key_takeaways && res.key_takeaways.length) {
+                html += '<ul>' + res.key_takeaways.map(function(t) { return '<li>' + $('<div>').text(t).html() + '</li>'; }).join('') + '</ul>';
+            }
+        }
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + html + '</div>');
+    }, 'json').fail(function() {
+        btn.prop('disabled', false).text('Regenerate');
+        $('.transcribe-batch-alert').html('<div class="alert alert-danger">Request failed.</div>');
+    });
+});
+
+var loadPollTimer = null;
+
+function loadHealthClass(level) {
+    if (level === 'ok') return 'label-success';
+    if (level === 'warning') return 'label-warning';
+    if (level === 'critical') return 'label-danger';
+    return 'label-default';
+}
+
+function formatTs(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts * 1000);
+    return d.toLocaleString();
+}
+
+function refreshTranscriptLoad() {
+    $.get('{{LINK aj/ap/transcribe_load_status}}', {}, function(res) {
+        if (res.status != 200 || !res.snapshot) {
+            $('#transcript-load-panel').html('<p class="text-danger">' + (res.message || 'Could not read server load') + '</p>');
+            return;
+        }
+        var s = res.snapshot;
+        var h = res.health || {};
+        $('#load-health-badge').attr('class', 'label m-l-10 ' + loadHealthClass(h.level)).text(h.label || '—');
+        $('#load-last-updated').text('Updated ' + formatTs(s.time));
+        var html = '<p>' + $('<div>').text(h.message || '').html() + '</p>';
+        html += '<table class="table table-bordered table-condensed"><tbody>';
+        html += '<tr><th>Load avg (1 / 5 / 15 min)</th><td>' + (s.load_1 != null ? s.load_1 : '—') + ' / ' + (s.load_5 != null ? s.load_5 : '—') + ' / ' + (s.load_15 != null ? s.load_15 : '—') + '</td></tr>';
+        html += '<tr><th>CPU cores</th><td>' + (s.cpus || '—') + '</td></tr>';
+        html += '<tr><th>Load per CPU (1 min)</th><td>' + (s.load_per_cpu != null ? s.load_per_cpu : '—') + '</td></tr>';
+        if (s.memory_percent != null) {
+            html += '<tr><th>Memory used</th><td>' + s.memory_percent + '%</td></tr>';
+        }
+        html += '<tr><th>Queue waiting / processing</th><td>' + (s.queue.queued||0) + ' / ' + (s.queue.processing||0) + '</td></tr>';
+        html += '<tr><th>Jobs per cron (setting)</th><td>' + (s.jobs_per_cron||'—') + '</td></tr>';
+        html += '<tr><th>Email alerts</th><td>' + (res.monitor_enabled ? 'On → ' + $('<div>').text(res.alert_email || 'not set').html() : 'Off') + '</td></tr>';
+        if (res.last_alert) {
+            html += '<tr><th>Last alert sent</th><td>' + formatTs(res.last_alert) + '</td></tr>';
+        }
+        html += '</tbody></table>';
+        if (h.advice && h.advice.length) {
+            html += '<div class="alert alert-' + (h.level === 'critical' ? 'danger' : 'warning') + '"><strong>Suggestions</strong><ul>';
+            h.advice.forEach(function(t) { html += '<li>' + $('<div>').text(t).html() + '</li>'; });
+            html += '</ul></div>';
+        }
+        if (res.history && res.history.length) {
+            html += '<h6>Recent samples</h6><table class="table table-sm table-bordered"><tr><th>Time</th><th>Load/CPU</th><th>Level</th><th>Queue</th></tr>';
+            res.history.slice().reverse().slice(0, 12).forEach(function(row) {
+                html += '<tr><td>' + formatTs(row.time) + '</td><td>' + (row.load_per_cpu != null ? row.load_per_cpu : '—') + '</td><td>' + row.level + '</td><td>' + (row.queued||0) + '/' + (row.processing||0) + '</td></tr>';
+            });
+            html += '</table><small class="text-muted">New history point at most every 2 minutes (cron or this page).</small>';
+        }
+        $('#transcript-load-panel').html(html);
+    }, 'json');
+}
+
+function scheduleLoadPoll() {
+    if (loadPollTimer) clearInterval(loadPollTimer);
+    var sec = parseInt($('input[name="transcript_load_poll_seconds"]').val(), 10) || 30;
+    if (sec < 15) sec = 15;
+    loadPollTimer = setInterval(refreshTranscriptLoad, sec * 1000);
+}
+
+$('#refresh-load-btn').on('click', refreshTranscriptLoad);
+$('#test-load-alert-btn').on('click', function() {
+    $.post('{{LINK aj/ap/transcribe_load_test_alert}}', {}, function(res) {
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-load-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+    }, 'json');
+});
+
+function refreshTranscriptCronStatus() {
+    $.get('{{LINK aj/ap/transcribe_cron_status}}', {}, function(res) {
+        if (res.status != 200 || !res.diagnostics) {
+            $('#transcript-cron-panel').html('<p class="text-danger">Could not load cron status.</p>');
+            return;
+        }
+        var d = res.diagnostics;
+        if (d.cron_url) {
+            $('#cron-url-hint').text(d.cron_url);
+        }
+        var html = '<table class="table table-bordered table-condensed"><tbody>';
+        html += '<tr><th>Transcription system</th><td>' + (d.system_on ? 'On' : '<strong class="text-danger">Off</strong>') + '</td></tr>';
+        html += '<tr><th>Last cron hit</th><td>';
+        if (d.last_run) {
+            html += formatTs(d.last_run);
+            if (d.last_run_ago != null) {
+                html += ' (' + Math.round(d.last_run_ago / 60) + ' min ago)';
+            }
+        } else {
+            html += '<span class="text-danger">Never</span>';
+        }
+        html += '</td></tr>';
+        html += '<tr><th>Queue waiting</th><td>' + (d.queue_waiting||0) + '</td></tr>';
+        html += '<tr><th>Stuck (processing=1)</th><td>' + (d.queue_stuck_processing||0) + '</td></tr>';
+        html += '<tr><th>Jobs per cron run</th><td>' + (d.jobs_per_run||'—') + '</td></tr>';
+        if (d.last_result && d.last_result.message) {
+            html += '<tr><th>Last run result</th><td>' + $('<div>').text(d.last_result.message).html();
+            if (d.last_result.time) {
+                html += ' <small class="text-muted">@ ' + formatTs(d.last_result.time) + '</small>';
+            }
+            html += '</td></tr>';
+        }
+        html += '</tbody></table>';
+        if (d.likely_issue) {
+            html += '<div class="alert alert-warning">' + $('<div>').text(d.likely_issue).html() + '</div>';
+        }
+        $('#transcript-cron-panel').html(html);
+    }, 'json');
+}
+
+$('#refresh-cron-btn').on('click', refreshTranscriptCronStatus);
+$('#run-cron-btn').on('click', function() {
+    if (!confirm('Run transcription cron now? This may take a long time for Whisper.')) {
+        return;
+    }
+    $('#run-cron-btn').prop('disabled', true).text('Running…');
+    $.post('{{LINK aj/ap/transcribe_run_cron}}', {}, function(res) {
+        $('#run-cron-btn').prop('disabled', false).text('Run cron now');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-cron-alert').html('<div class="alert ' + cls + '">' + $('<div>').text(res.message || res.error || '').html() + '</div>');
+        refreshTranscriptCronStatus();
+        refreshTranscriptStatus();
+    }, 'json').fail(function() {
+        $('#run-cron-btn').prop('disabled', false).text('Run cron now');
+        $('.transcribe-cron-alert').html('<div class="alert alert-danger">Request failed or timed out. The job may still be running on the server — refresh cron status in a minute.</div>');
+        refreshTranscriptCronStatus();
+    });
+});
+
+refreshTranscriptLoad();
+scheduleLoadPoll();
+$('input[name="transcript_load_poll_seconds"]').on('change', scheduleLoadPoll);
+refreshTranscriptCronStatus();
+
+$('#apply-desc-btn').on('click', function() {
+    var channelId = $('#channel_id').val();
+    if (!channelId) {
+        $('.transcribe-batch-alert').html('<div class="alert alert-warning">Select a channel.</div>');
+        return;
+    }
+    $('#apply-desc-btn').prop('disabled', true).text('Working…');
+    $.post('{{LINK aj/ap/transcribe_apply_descriptions}}', {
+        channel_id: channelId,
+        batch_limit: $('#seo_batch_limit').val()
+    }, function(res) {
+        $('#apply-desc-btn').prop('disabled', false).text('Apply descriptions (has summary)');
+        var cls = res.status == 200 ? 'alert-success' : 'alert-danger';
+        $('.transcribe-batch-alert').html('<div class="alert ' + cls + '">' + (res.message || '') + '</div>');
+    }, 'json');
+});
+</script>

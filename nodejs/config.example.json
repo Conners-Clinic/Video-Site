@@ -1,0 +1,16 @@
+{
+  "db_hostname": "localhost",
+  "db_username": "CHANGE_ME",
+  "db_password": "CHANGE_ME",
+  "db_dbname": "CHANGE_ME",
+  "site_url": "https://example.com",
+  "server_ip": "127.0.0.1",
+  "server_port": 4545,
+  "amazon": false,
+  "amazon_bucket": "",
+  "nodejs_message_update_interval": 500,
+  "ajax_message_update_interval": 3000,
+  "ssl": false,
+  "ssl_privatekey_full_path": "/path/to/private.key",
+  "ssl_cert_full_path": "/path/to/certificate.pem"
+}

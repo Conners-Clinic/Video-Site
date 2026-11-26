@@ -1,0 +1,68 @@
+#!/bin/sh
+# Continuity Stage 0 command dispatcher. Run from anywhere inside the repo:
+#   sh .continuity/continuity <command> [args]
+# Commands:
+#   init [--yes] [--skills-mode link|copy]   install hooks, skills, instruction blocks; inspect deploy config
+#   uninstall [--yes] [--hooks-only] [--purge]
+#   hooks remove [--yes]                     remove only the hook entries init added
+#   config KEY VALUE                         e.g. config nudge off
+#   workstream new "TITLE" [--branch B] [--plans pl_a,pl_b] [--next TEXT]
+#   workstream list [--all]
+#   handoff new WORKSTREAM [--agent A]       create a checkpoint file with git facts filled in
+#   handoff commit FILE [--summary S]        validate, sync plans, update workstream, commit .continuity/ only
+#   pickup [WORKSTREAM] [--facts]            project overview, or verification report for one workstream
+#   map [--all]                              roadmap phases and plans; completed plans collapsed
+#   sync-plans [--check]
+#   outline FILE
+#   onboard inventory
+#   onboard apply PROPOSAL.json [--yes]
+#   dashboard connect URL TOKEN | status | flush | send [FILE] | disconnect
+#                                            send checkpoints to the dashboard before they are pushed (optional)
+#   test                                     run the Stage 0 test suite in throwaway repos
+set -e
+here="$(cd "$(dirname "$0")" && pwd)"
+py="${CONTINUITY_PYTHON:-python3}"
+command -v "$py" >/dev/null 2>&1 || { echo "continuity: python3 is required for this command" >&2; exit 1; }
+core="$here/scripts/continuity.py"
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+  init) exec "$py" "$core" install "$@" ;;
+  uninstall) exec "$py" "$core" uninstall "$@" ;;
+  hooks)
+    sub="${1:-}"; [ $# -gt 0 ] && shift
+    [ "$sub" = "remove" ] || { echo "usage: hooks remove [--yes]" >&2; exit 1; }
+    exec "$py" "$core" uninstall --hooks-only "$@" ;;
+  config) exec "$py" "$core" config "$@" ;;
+  workstream)
+    sub="${1:-list}"; [ $# -gt 0 ] && shift
+    case "$sub" in
+      new) exec "$py" "$core" workstream-new "$@" ;;
+      list) exec "$py" "$core" workstream-list "$@" ;;
+      *) echo "usage: workstream new|list" >&2; exit 1 ;;
+    esac ;;
+  handoff)
+    sub="${1:-}"; [ $# -gt 0 ] && shift
+    case "$sub" in
+      new) exec "$py" "$core" checkpoint-new "$@" ;;
+      commit) exec "$py" "$core" checkpoint-commit "$@" ;;
+      facts) exec "$py" "$core" pickup --facts ;;
+      validate) exec "$py" "$core" validate "$@" ;;
+      *) echo "usage: handoff facts|new|commit|validate" >&2; exit 1 ;;
+    esac ;;
+  pickup) exec "$py" "$core" pickup "$@" ;;
+  map) exec "$py" "$core" map "$@" ;;
+  sync-plans) exec "$py" "$core" sync-plans "$@" ;;
+  outline) exec "$py" "$core" outline "$@" ;;
+  secret-scan) exec "$py" "$core" secret-scan "$@" ;;
+  onboard)
+    sub="${1:-}"; [ $# -gt 0 ] && shift
+    case "$sub" in
+      inventory) exec "$py" "$core" onboard-inventory "$@" ;;
+      apply) exec "$py" "$core" onboard-apply "$@" ;;
+      *) echo "usage: onboard inventory|apply" >&2; exit 1 ;;
+    esac ;;
+  dashboard) exec "$py" "$core" dashboard "$@" ;;
+  test) exec sh "$here/scripts/test.sh" "$@" ;;
+  help|-h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "continuity: unknown command $cmd (try: sh .continuity/continuity help)" >&2; exit 1 ;;
+esac

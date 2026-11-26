@@ -1,0 +1,11 @@
+{
+    "require": {
+        "hybridauth/hybridauth": "^3.12.3"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.35"
+        },
+        "allow-plugins": false
+    }
+}

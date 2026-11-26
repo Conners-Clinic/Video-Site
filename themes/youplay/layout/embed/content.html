@@ -1,0 +1,905 @@
+<?php if(!isset($_GET['load'])){ ?>
+<style type="text/css">
+   <?php
+      if (!empty($_GET['color'])) {
+         $re = '/^#([0-9a-f]{3}){1,2}$/i';
+         preg_match($re, '#'.$_GET['color'], $matches, PREG_OFFSET_CAPTURE, 0);
+         if (!empty($matches) && !empty($matches[0]) && !empty($matches[0][0])) {
+            $matches[0][0] = PT_Secure($matches[0][0]);
+            $matches[0][0] = filter_var ( $matches[0][0], FILTER_UNSAFE_RAW);
+            echo ".plyr--full-ui.plyr--video .plyr__control--overlaid{background-color: ".$matches[0][0]." !important;}";
+            echo ".plyr__volume input[type=range] {color: ".$matches[0][0]." !important;}";
+            echo ".plyr__progress input[type=range] {color: ".$matches[0][0]." !important;}";
+            echo ".plyr--video .plyr__control:hover {color: ".$matches[0][0]." !important;background-color:#fff !important;}";
+            echo ".mejs__time-current{background-color: ".$matches[0][0]." !important;}";
+            echo ".mejs__overlay-play:hover .mejs__overlay-button {background-color: ".$matches[0][0]." !important;}";
+         }
+      }
+       ?>
+</style>
+<html>
+<head>
+  <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+  <meta name="robots" content="noindex">
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+    <script src="{{CONFIG theme_url}}/js/Fingerprintjs2/fingerprint2.js"></script>
+    <link rel="stylesheet" href="{{CONFIG theme_url}}/player/css/mediaelementplayer.min.css?version={{CONFIG version}}" />
+    <script src="{{CONFIG theme_url}}/player/js/mediaelement-and-player.min.js?version={{CONFIG version}}"></script>
+    <script src="{{CONFIG theme_url}}/player/plugins/quality/quality.min.js?version={{CONFIG version}}"></script>
+    <script src="{{CONFIG theme_url}}/player/plugins/speed/speed.min.js?version={{CONFIG version}}"></script>
+    <script src="{{CONFIG theme_url}}/player/plugins/jump/jump-forward.min.js?version={{CONFIG version}}"></script>
+    <link rel="stylesheet" href="{{CONFIG theme_url}}/player/plugins/quality/quality.min.css?version={{CONFIG version}}" />
+    <link rel="stylesheet" href="{{CONFIG theme_url}}/player/plugins/speed/speed.min.css?version={{CONFIG version}}" />
+    <link rel="stylesheet" href="{{CONFIG theme_url}}/player/plugins/jump/jump-forward.min.css?version={{CONFIG version}}" />
+ <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />   <?php if (!empty($pt->get_video->twitch)) {  ?>
+    <script src= "https://player.twitch.tv/js/embed/v1.js"></script>
+  <?php }  ?>
+  <?php if (!empty($pt->config->google)) { echo htmlspecialchars_decode($pt->config->google); } ?>
+  <?php if (!empty($pt->config->google_vignette)) { echo htmlspecialchars_decode($pt->config->google_vignette); } ?>
+  <script src="{{CONFIG theme_url}}/js/plyr.polyfilled.js"></script>
+  <link rel="stylesheet" href="{{CONFIG theme_url}}/player/css/plyr.css" />
+  <title>{{TITLE}}</title>
+<?php if($pt->playlist) { ?>
+      <link rel="stylesheet" href="{{CONFIG theme_url}}/css/bootstrap.min.css?version={{CONFIG version}}">
+      <link rel="stylesheet" href="{{CONFIG theme_url}}/css/style.css?version={{CONFIG version}}" id="style-css">
+<?php } ?>
+<script>
+const mejsHeightInterval = setInterval(function () {
+  var viewportHeight = $(window).height();
+console.log(viewportHeight)
+  if (viewportHeight === 400 || 1== 1) {
+
+    if (!$('#mejs-container-minheight-style').length) {
+      $('<style id="mejs-container-minheight-style">.mejs__container,video{min-height:'+viewportHeight+'px}</style>')
+        .appendTo('head');
+    }
+
+    clearInterval(mejsHeightInterval);
+  }
+}, 10);
+</script>
+</head>
+<body>
+<?php } ?>
+
+<?php if($pt->playlist) { ?>
+<div class="row">
+<div class="col-md-9 col-lg-9 col-sm-12 col-xs-12">
+<?php } ?>
+  <div class="video-player embed-video-player {{USR_AD_TRANS}}" style="overflow: hidden;">
+        <?php if (!empty($pt->config->watermark)) { ?>
+        <div class="watermark">
+          <a href="{{CONFIG site_url}}" target="_blank"><img src="{{CONFIG watermark}}" alt='watermark logo'></a>
+        </div>
+        <?php } ?>
+        <?php if (!empty($pt->get_video->vimeo)) {?>
+            <iframe src="http://player.vimeo.com/video/{{VIDEO_ID}}?api=1;title=0&amp;byline=0&amp;portrait=0&amp;autoplay=1" width="100%" ___height="<?php echo $pt->height;?>" frameborder="0" webkitAllowFullScreen mozallowfullscreen allowFullScreen></iframe>
+         <?php } else if (!empty($pt->get_video->daily)) { ?>
+            <iframe frameborder="0" width="100%" height="<?php echo $pt->height;?>" src="//www.dailymotion.com/embed/video/{{VIDEO_ID}}?PARAMS" allowfullscreen></iframe>
+        <?php }  else if (!empty($pt->get_video->youtube) && $pt->config->youtube_player == 'on') { ?>
+            <iframe width="100%" height="<?php echo $pt->height;?>" src="https://www.youtube.com/embed/<?php echo($pt->get_video->youtube); ?>" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+         <?php }  else if (!empty($pt->get_video->twitch)) {
+                  if ($pt->get_video->twitch_type != 'streams') {
+                     if ($pt->get_video->twitch_type == 'videos') {
+                        $link = 'https://player.twitch.tv/?video='.$pt->get_video->twitch;
+                     }
+                     else{
+                        $link = 'https://clips.twitch.tv/embed?clip='.$pt->get_video->twitch;
+                     }
+               ?>
+               <div class="pt_vdo_plyr"><div class="embed-responsive embed-responsive-16by9"><iframe width="100%" src="<?php echo($link) ?>&autoplay=false" allowfullscreen></iframe></div></div>
+               <?php }else{ ?>
+                  <div class="pt_vdo_plyr"><div class="embed-responsive embed-responsive-16by9"><div id="twitch_player__"></div></div></div>
+                  <script type="text/javascript">
+                    var options = {
+                      width: '100%',
+                      channel: "<?php echo($pt->get_video->twitch) ?>",
+                    };
+                    var player = new Twitch.Player("twitch_player__", options);
+                  </script>
+               <?php } ?>
+            <?php } else { ?>
+			<style id="xxxs">
+			
+			</style>
+			<div style="position:relative;">
+			<div id="video-toast" class="video-toast"></div>
+            <video  onplay="do_size();$('.mejs__container').css('height',$('#my-video_html5').height() + 'px');$('#xxxs').html('#my-video_html5{.mejs__container:height: '+$('#my-video_html5').height()+'px !important;}');" id="my-video" style="width:100%; height:100%;position: relative;" poster="{{THUMBNAIL}}" playsinline>
+               <?php if (!empty($pt->video_4096)) { ?>
+                     <source src="{{VIDEO_LOCATION_4096}}" type="{{VIDEO_TYPE}}" data-quality="4K" title='4K' label='4K' res='4096'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_2048)) { ?>
+                     <source src="{{VIDEO_LOCATION_2048}}" type="{{VIDEO_TYPE}}" data-quality="2K" title='2K' label='2K' res='2048'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_1080)) { ?>
+                     <source src="{{VIDEO_LOCATION_1080}}" type="{{VIDEO_TYPE}}" data-quality="1080p" title='1080p' label='1080p' res='1080'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_720)) { ?>
+                     <source src="{{VIDEO_LOCATION_720}}" type="{{VIDEO_TYPE}}" data-quality="720p" title='720p' label='720p' res='720'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_480)) { ?>
+                     <source src="{{VIDEO_LOCATION_480}}" type="{{VIDEO_TYPE}}" data-quality="480p" title='480p' label='480p' res='480'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_360)) { ?>
+                     <source src="{{VIDEO_LOCATION_360}}" type="{{VIDEO_TYPE}}" data-quality="360p" title='360p' label='360p' res='360'>
+                     <?php } ?>
+                     <?php if (!empty($pt->video_240)) { ?>
+                     <source src="{{VIDEO_LOCATION_240}}" type="{{VIDEO_TYPE}}" data-quality="240p" title='240p' label='240p' res='240'>
+                     <?php } ?>
+                     <?php if (!empty($pt->get_video->youtube) || (!empty($pt->get_video->video_location) && empty($pt->video_360) && $pt->config->ffmpeg_system == "off")) { ?>
+                     <source src="{{VIDEO_LOCATION}}" type="{{VIDEO_TYPE}}" data-quality="360p" title='360p' label='360p' res='360'>
+                     <?php } ?> Your browser does not support HTML5 video.
+               <!-- //src="http://www.youtube.com/watch?v=nOEw9iiopwI" type="video/youtube" -->
+            </video>
+			</div>
+         <?php } ?>
+         <?php if (!empty($pt->ad_image)) {
+          ?>
+            <a href="{{AD_P_LINK}}" class="ad-link" target="_blank">
+               <div class="ad-image">
+                  <div class="ads-test"><i class="fa fa-bullhorn"></i> Advertisement will close in <span class="timer">(<span>{{AD_SKIP_NUM}}</span>)</span></div>
+                  <img src="{{AD_IMAGE}}" alt="Ads">
+               </div>
+            </a>
+            <?php } ?>
+    </div>
+
+<?php if($pt->playlist) { ?>
+</div>
+<div class="col-md-3 col-lg-3 col-sm-12 col-xs-12  no-padding-left   play-list-cont-wrapper ">
+<div class="play-list-container" style="height:auto;">
+<div class="next-video pt_plist_hdr" style="background: #000;display:block;">
+
+<style>
+
+
+.sort-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.sort-btn {
+  min-width: 140px;
+  text-align: left;
+}
+
+.sort-btn .fa-caret-down {
+  margin-top: 4px;
+}
+
+.sort-dropdown .dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 5px 0;
+  margin: 2px 0 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 6px 12px rgba(0,0,0,.175);
+}
+
+.sort-dropdown.open .dropdown-menu {
+  display: block;
+}
+
+.sort-dropdown .dropdown-menu > li > a {
+  padding: 6px 15px;
+  display: block;
+  color: #333;
+  text-decoration: none;
+}
+
+.sort-dropdown .dropdown-menu > li > a:hover {
+  background: #f5f5f5;
+}
+
+.sort-dropdown .dropdown-header {
+  padding: 6px 15px;
+  font-size: 12px;
+  color: #999;
+}
+
+.sort-dropdown .divider {
+  height: 1px;
+  margin: 6px 0;
+  background: #e5e5e5;
+}
+</style>
+
+
+                        <div class="next-text">
+                           <h4>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                                 <path fill="none" d="M0 0h24v24H0z"></path>
+                                 <path fill="currentColor" d="M19.376 12.416L8.777 19.482A.5.5 0 0 1 8 19.066V4.934a.5.5 0 0 1 .777-.416l10.599 7.066a.5.5 0 0 1 0 .832z"></path>
+                              </svg>
+                                                            &nbsp;&nbsp;<?php 
+															if(isset($_GET['list'])){
+															$db->where ("list_id", $_GET['list']);
+															$user = $db->getOne ("lists");
+															
+															echo ($user->name);
+															//echo $pt->get_video->title;
+															}
+															?>
+                                                            
+                           </h4>
+                           <div class="checkbox checkbox-info">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="count_vids"></span> Videos</div>
+                        </div>
+<div class="dropdown sort-dropdown">
+  <button type="button" class="btn btn-default sort-btn">
+    <i class="fa-solid fa-sort"></i>
+    <span class="sort-text">Sort</span>
+    <i class="fa-solid fa-caret-down pull-right"></i>
+  </button>
+
+  <ul class="dropdown-menu">
+    <li class="dropdown-header">Date</li>
+    <li><a href="#" data-sort="date" data-order="asc">Oldest first</a></li>
+    <li><a href="#" data-sort="date" data-order="desc">Newest first</a></li>
+
+    <li class="divider"></li>
+
+    <li class="dropdown-header">Length</li>
+    <li><a href="#" data-sort="length" data-order="asc">Short → Long</a></li>
+    <li><a href="#" data-sort="length" data-order="desc">Long → Short</a></li>
+
+    <li class="divider"></li>
+
+    <li class="dropdown-header">Title</li>
+    <li><a href="#" data-sort="title" data-order="asc">A → Z</a></li>
+    <li><a href="#" data-sort="title" data-order="desc">Z → A</a></li>
+  </ul>
+</div>                     </div>
+
+<script>
+$('.sort-btn').on('click', function (e) {
+  e.stopPropagation();
+  $('.sort-dropdown').toggleClass('open');
+});
+
+$(document).on('click', function () {
+  $('.sort-dropdown').removeClass('open');
+});
+
+$('.sort-dropdown a').on('click', function (e) {
+  e.preventDefault();
+
+  var sortBy = $(this).data('sort');   // date | length | title
+  var order  = $(this).data('order');  // asc | desc
+
+  // map UI values → data attributes
+  if (sortBy === 'date') sortBy = 'time';
+  if (sortBy === 'length') sortBy = 'duration';
+
+  sortVideos(sortBy, order);
+});
+function sortVideos(sortBy, order) {
+  var $list = $('.videos-list');
+  var $items = $list.find('.video-wrapper');
+
+  $items.sort(function (a, b) {
+    var valA = $(a).data(sortBy);
+    var valB = $(b).data(sortBy);
+
+    // title needs string compare
+    if (sortBy === 'title') {
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return order === 'asc'
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    }
+
+    // numeric compare (time, duration)
+    valA = parseInt(valA, 10) || 0;
+    valB = parseInt(valB, 10) || 0;
+
+    return order === 'asc' ? valA - valB : valB - valA;
+  });
+
+  $list.append($items);
+}
+</script>                     </div>
+
+<div class="videos-list related-videos play-list-cont">
+<?php echo $pt->playlist; ?>
+
+</div>
+</div>
+</div>
+
+<?php } ?>
+    <input type="hidden" class="main_session" value="<?php echo PT_CreateMainSession();?>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+<script>
+function load_next(url,element){
+if(element !=  false){$(element).prop('disabled',true);}
+$.get(url, function(data, status){
+	$('body').html(data);
+	$('.mejs__overlay-button').click();
+	$('body').css('padding-top','0px');
+	$('video').mediaelementplayer();
+
+});
+
+}
+function play_next(){
+if($('.play-list-cont-wrapper').length){
+load_next($('#vid_<?php echo $pt->get_video->video_id;?>').next().find('a').attr('href'),false);
+
+
+}
+
+}
+function backward() {
+    var video = $('video').get(0);
+    if (video) {
+        var update_time = video.currentTime - 15;
+        if (update_time < 0) {
+            update_time = 0;
+        }
+        video.currentTime = update_time;
+    }
+}
+
+function do_size(){
+h = $('.col-md-9').height();
+<!-- if($('body').width() > 800){ -->
+if($('.play-list-cont-wrapper').length){
+if($('body').width() < 800){
+h = h- 70;
+}
+$('#xx').html('.play-list-cont{height:'+h+'px !important}');
+}
+<!-- } -->
+}
+
+[40, 100, 300, 600, 1000, 2000, 3000, 5000, 8000].forEach(delay => 
+  setTimeout(do_size, delay)
+);
+
+do_size();
+var i = 1;
+var len = $('.vid-number-cont').length;
+$('.vid-number-cont').each(function(){
+$(this).html('<span >'+i+'</span>');
+i++;
+});
+var current = $("div[data-litsitem-id='<?php echo $pt->get_video->video_id;?>'] .vid-number-cont span").html();
+$('.count_vids').html(current + '/' + len);
+$('#counter').html(current + '/' + len);
+setTimeout(function(){
+$('#counter').html(current + '/' + len);
+$('#counter_3').html(current + '/' + len);
+}, 1000);
+
+jQuery("div[data-litsitem-id='<?php echo $pt->get_video->video_id;?>']").css('background-color','#000')
+// jQuery("div[data-litsitem-id='<?php echo $pt->get_video->video_id;?>']").find('.vid-number-cont').html('<span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span>');
+
+	
+ $('video').mediaelementplayer({
+
+      pluginPath: 'https://cdnjs.com/libraries/mediaelement-plugins/',
+      shimScriptAccess: 'always',
+      autoplay: false,
+      features: ['playpause', 'current', 'progress', 'duration', 'speed', 'skipback',  'tracks', 'markers', 'volume', 'chromecast', 'contextmenu','jumpbackward','jumpforward', 'flash' <?php echo ($pt->config->ffmpeg_system == 'on' && empty($pt->get_video->youtube)) ? ", 'quality'" : ''?> {{ADS}} {{VAT}}, 'fullscreen'],
+      vastAdTagUrl: '{{VAST_URL}}',
+      vastAdsType: '{{VAST_TYPE}}',
+      jumpForwardInterval: 30,
+      jumpBackwardInterval: 15,
+	  
+      adsPrerollMediaUrl: [{{AD_MEDIA}}],
+      adsPrerollAdUrl: [{{AD_LINK}}],
+      adsPrerollAdEnableSkip: {{AD_SKIP}},
+      adsPrerollAdSkipSeconds: {{AD_SKIP_NUM}},
+      success: function (media, originalNode, instance) {
+
+
+<!-- if($(document).height() < 450){ -->
+<!-- hh = $(document).height() - 2; -->
+<!-- let count = 0; -->
+<!-- const interval = setInterval(function () { -->
+    <!-- $('.mejs__container').css('height', hh + 'px'); -->
+    <!-- if (++count >= 100) clearInterval(interval); -->
+<!-- }, 100);} -->
+    $('.embed-video-player').prepend('<h3 class="title_text"><?php echo $pt->get_video->title;?></h3>');
+
+
+
+    
+$('.mejs__jump-forward-button').each(function() {
+    var $cloned = $(this).clone().css('transform', 'scaleX(-1)'); 
+	$cloned.addClass('cloned');
+	$cloned.attr('onclick','backward();');
+	$(this).before($cloned);
+	$('.cloned button').html('<p style="transform: scaleX(-1); padding: 0px; margin: 0px;">15</p>');
+});
+
+
+<!-- const logoUrl='https://videos.connersclinic.com/themes/youplay/img/logo.png'; -->
+const logoUrl='/upload/1.png';
+const $logo=$(`
+<div class="mejs__custom-logo"><a href="#" target="_blank"><img src="${logoUrl}" alt="Site Logo"></a></div>`);
+$logo.on('click',function(e){
+  e.preventDefault();
+  document.querySelectorAll('video').forEach(v=>v.pause());
+  const t=Math.floor(media.currentTime),
+  id="<?php echo $pt->get_video->video_id;?>",
+  ref=encodeURIComponent(window.location.href),
+  url=`https://videos.connersclinic.com/watch/${id}?iframe=true&seek=${t}&refer=${ref}`;
+  window.open(url,'_blank');
+});
+const $fs=$(instance.container).find('.mejs__fullscreen-button');
+$fs.length?$fs.before($logo):$(instance.container).find('.mejs__controls').append($logo);
+
+$('.mejs__jump-forward-button').each(function(){
+  const $cloned=$(this).clone().css('transform','scaleX(-1)');
+  $cloned.addClass('cloned').attr('onclick','backward();');
+  $(this).before($cloned);
+  $cloned.find('button').html('<p style="transform:scaleX(-1);padding:0;margin:0;">15</p>');
+});
+
+      tippy('.mejs__custom-logo', {
+        content: '<p class="display-3" style="font-size:10px;">Watch on Conners Clinic</p>',
+          allowHTML: true,
+      });
+ if ($('.cloned').length > 1) $('.cloned:gt(0)').remove();
+     
+
+/*
+
+                    var rewindButton = $('<div class="mejs__button mejs__rewind-button">' +
+                        '<button style="background:transparent; border:none; cursor:pointer;">' +
+                        '<svg style="height: 16px;" sxmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512">' +
+                        '<path fill="#fff" d="M459.5 440.6c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-320c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4L288 214.3l0 41.7 0 41.7L459.5 440.6zM256 352l0-96 0-128 0-32c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4l-192 160C4.2 237.5 0 246.5 0 256s4.2 18.5 11.5 24.6l192 160c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-64z"/>' +
+                        '</svg></button></div>');
+
+                    // Insert rewind button AFTER the play/pause button
+                    $('.mejs__playpause-button').after(rewindButton);
+
+                    // Add click event to rewind 15 seconds
+                    rewindButton.on('click', function () {
+                        media.setCurrentTime(Math.max(media.currentTime - 15, 0));
+						showToast("-15s");
+                    });
+ 
+                    var forwardButton = $('<div class="mejs__button mejs__rewind-button">' +
+                        '<button style="background:transparent; border:none; cursor:pointer;">' +
+                        '<svg style="height: 16px;" sxmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512">' +
+                        '<path fill="#fff" d="M52.5 440.6c-9.5 7.9-22.8 9.7-34.1 4.4S0 428.4 0 416L0 96C0 83.6 7.2 72.3 18.4 67s24.5-3.6 34.1 4.4L224 214.3l0 41.7 0 41.7L52.5 440.6zM256 352l0-96 0-128 0-32c0-12.4 7.2-23.7 18.4-29s24.5-3.6 34.1 4.4l192 160c7.3 6.1 11.5 15.1 11.5 24.6s-4.2 18.5-11.5 24.6l-192 160c-9.5 7.9-22.8 9.7-34.1 4.4s-18.4-16.6-18.4-29l0-64z"/>' +
+                        '</svg></button></div>');
+
+                    // Insert rewind button AFTER the play/pause button
+                    $('.mejs__rewind-button').after(forwardButton);
+
+                    // Add click event to rewind 15 seconds
+                    forwardButton.on('click', function () {
+                        media.setCurrentTime(Math.max(media.currentTime + 15, 0));
+						showToast("+15s");
+                    });
+*/
+
+let hideTitleTimer = null;
+
+media.addEventListener('play', function () {
+
+  clearTimeout(hideTitleTimer);
+
+  hideTitleTimer = setTimeout(function () {
+    $('.title_text').fadeOut();
+  }, 4000);
+
+});
+media.addEventListener('pause', function () {
+  clearTimeout(hideTitleTimer);
+  $('.title_text').fadeIn();
+});
+
+          media.addEventListener('ended', function (e) {
+  clearTimeout(hideTitleTimer);
+  $('.title_text').fadeIn();
+  $('#adContainer').slideUp();
+			play_next();
+            src = $('video').attr('src');
+            sources = $('video').find('source');
+            for (var i = sources.length - 1; i >= 0; i--) {
+               if ($(sources[i]).attr('src') == src) {
+                  if ($('#autoplay').is(":checked")) {
+                     var url = $('#next-video').find('a').attr('href');
+                     if (url) {
+                        window.location.href = url;
+                     }
+                  }
+                  else{
+                    /* pass */
+                  }
+               }
+            }
+          }, false);
+
+          media.addEventListener('playing', function (e) {
+            if (pt_elexists('.ads-overlay-info')) {
+              $('.ads-overlay-info').remove();
+            }
+
+            $('.ads-test').remove();
+
+            if ($('body').attr('resized') == 'true') {
+                PT_Resize(true);
+            }
+ 
+            <!-- $('.mejs__container').css('height', ($('.mejs__container').width() / 1.77176216) + 'px'); -->
+            $('video, iframe').css('height', '100%');
+          });
+          <?php if (!empty($pt->get_video->youtube)) { ?>
+            //    $(document).on('click', '.mejs__container', function(event) {
+
+            //    $('.mejs__layer').css('display', 'flex');
+            //    $('.mejs__overlay-play').css('display', 'none');
+            //    media.play();
+            // });
+         <?php } ?>
+      },
+    });
+
+
+$(".video-player").hover(
+    function(e){
+      $('.watermark').css('display', 'block');
+     },
+    function(e){
+      setTimeout(function () {
+        if ($('.video-player:hover').length == 0) {
+          $('.watermark').css('display', 'none');
+        }
+      }, 1000);
+     }
+);
+// $('video, audio').mediaelementplayer({
+//   // Do not forget to put a final slash (/)
+//   pluginPath: 'https://cdnjs.com/libraries/mediaelement/',
+//   // this will allow the CDN to use Flash without restrictions
+//   // (by default, this is set as `sameDomain`)
+//   shimScriptAccess: 'always',
+
+//   features: ['playpause','progress','current','duration','tracks','volume'<?php echo ($pt->autoplay == 1) ? ",'fullscreen'" : ""?>],
+
+//   success: function (media) {
+//      var isYoutube = ~media.rendererName.indexOf('youtube');
+//   }
+//   // more configuration
+// });
+
+
+function pt_elexists(el){
+  return ($(el).length > 0);
+}
+var played = false;
+
+if ('{{VAST_TYPE}}' == 'vast' && played == false) {
+  $('.mejs__ads-skip-button').click(function(event) {
+    $('video').attr('src', '{{VIDEO_LOCATION}}');
+    played = true;
+  });
+}
+
+
+
+$('.ad-link').on('click', function(event) {
+  $('.ad-link').remove();
+  $('video')[0].play();
+});
+
+<?php if (!empty($pt->ad_image)) { ?>
+var counter = {{AD_SKIP_NUM}};
+var interval = setInterval(function() {
+    counter--;
+    $('.timer span').text(counter);
+    if (counter == 0) {
+        $('.ad-link').remove();
+         $('video')[0].play();
+
+        clearInterval(interval);
+    }
+}, 1000);
+<?php } ?>
+$('.rad-transaction').click(function(event) {
+      $(this).off("click").removeClass('rad-transaction');
+      $.get('{{LINK aj/ads/rad-transaction}}', function(data){ /* pass */ });
+    });
+
+
+function slowDown(){
+do_size();
+<!-- var count = $('.col-md-3').attr('data-margin'); -->
+<!-- var interval = setInterval(function () { -->
+<!-- count--; -->
+<!-- console.log(count); -->
+<!-- $('.col-md-3').css('margin-right','-' + count + 'px'); -->
+$('.col-md-3').css('margin-right','0px');
+
+<!-- if(count < 1){clearInterval(interval);} -->
+<!-- }, 0.1); -->
+
+
+}
+function close_side(){
+w = $('.col-md-3').attr('data-margin');
+$('.col-md-3').css('margin-right','-' + w + 'px');
+
+}
+close_side();
+if($('.play-list-cont-wrapper').length){
+w = $('body').width();
+<!-- if(w > 800){ -->
+w = $('.col-md-3').width() +  40;
+$('.col-md-3').css('margin-right','-' + w + 'px');
+$('.col-md-3').attr('data-margin',w);
+$('.video-player ').append('<span onclick="slowDown();"  style="position: absolute; top: 0; right: 0; margin: 25px;z-index:1;cursor:pointer;"><svg height="24" class="show_list" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#fff" d="M40 48C26.7 48 16 58.7 16 72v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V72c0-13.3-10.7-24-24-24H40zM192 64c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zM16 232v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V232c0-13.3-10.7-24-24-24H40c-13.3 0-24 10.7-24 24zM40 368c-13.3 0-24 10.7-24 24v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V392c0-13.3-10.7-24-24-24H40z"/></svg><span style="display: block; color :#fff;" id="counter"></span></span>');
+$('.play-list-container').append('<svg onclick="close_side();" style="position: absolute; top: 0; right: 0; margin: 25px; z-index: 1; cursor: pointer;" height="24" class="closer_list" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#fff" d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>');
+<!-- $('.next-text').prepend('<h3 style="margin-top:0px; margin-bottom:0px"  >Videos <span id="counter_3"></span></h3>'); -->
+<!-- } -->
+}
+                function showToast(message) {
+                    var toast = $("#video-toast");
+                    toast.text(message).css("opacity", "1"); // Show toast
+                    setTimeout(function () {
+                        toast.css("opacity", "0"); // Hide after 1 second
+                    }, 1000);
+                }
+
+let titleTimer = null;
+const media = document.querySelector('.video-player video');
+
+$('.video-player').hover(
+  function () {
+    // HOVER IN → show title immediately
+    clearTimeout(titleTimer);
+    $('.title_text').stop(true, true).fadeIn();
+  },
+  function () {
+    // HOVER OUT → hide after 4s ONLY if playing
+    clearTimeout(titleTimer);
+
+    titleTimer = setTimeout(() => {
+      if (!media.paused && !media.ended) {
+        $('.title_text').fadeOut();
+      }
+    }, 4000);
+  }
+);
+</script>
+
+<?php if(!isset($_GET['load'])){ ?>
+</body>
+</html>
+<style>
+.title_text{
+    position: absolute;
+    top: 0px;
+    z-index: 111;
+    color: #fff;
+    width: max-content;
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: #00000091;
+    border-radius: 10px;
+    margin-left: 4px;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 10px);
+    }
+.tippy-content p{
+margin-bottom: 0px !important;
+}
+.mejs__container{
+min-width:100% !important;
+}
+video{
+object-fit: fill;}
+.mejs__poster {
+
+background-size: cover !important;
+}
+.mejs__custom-logo{
+position:relative;
+display:flex;
+img{
+        max-width: 80px;
+        background: #95c6554f;
+        padding: 5px;
+        border-radius: 10px;
+        margin-top: 5px;
+        max-height:30px;
+}
+}
+
+@media (max-width: 600px) {
+.mejs__custom-logo img{
+        margin-top: 8px;
+        max-height:25px !important;
+}
+}
+
+    .video-toast {
+        position: absolute;
+        bottom: 50%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.4);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 5px;
+        font-size: 60px;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+        z-index: 9999;
+    }
+@media (max-width: 800px) {
+.play-list-container .next-video{
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+.mejs__poster {
+background-size: contain;
+}
+}
+@media (min-width: 800px) {
+.video-duration{
+    position: absolute;
+    z-index: 1;
+    margin-left: 10px;
+    bottom: 5px;
+    left: 40px;
+}
+
+}
+.row{width:100% !important;margin:0px;}
+.col-lg-9{
+position: relative;
+width:100% !important;
+}
+.next-text{margin-top:10px;}
+.col-md-3{
+    position: fixed   !important;
+    top: 0px  !important;
+    z-index: 333  !important;
+    left: auto  !important;
+    right: 0px  !important;
+    opacity: 0.9  !important;
+    margin-right: -320px;
+}
+}
+@media (max-width: 800px) {
+
+.playlist-video-title a{font-size:12px;}
+#my-video_html5{height:auto !important;}
+}
+body {
+  margin: 0;
+  padding: 0;
+}
+video {
+  width: 100%;
+  height: 100%;
+
+}
+.watermark {
+  position: absolute;
+  z-index: 10;
+  left: 20px;
+  top: 20px;
+  transition: all 0.5s;
+  display: none;
+}
+.ad-image { width: 100%; height: 100%; background-color: #fcfcfc; text-align: center; z-index: 9; line-height: 100%; position: absolute; overflow: hidden; top: 0; }
+.ad-image img { text-align: center; max-width: 100%; margin-top: 5%; vertical-align: middle; }
+.ads-test { color: #ffcc7f; width: 100%; padding: 10px; background-color: rgba(0, 0, 0, 0.5); }
+.embed-video-player{position: relative;}
+.mejs__container
+{width: 100% !important; 
+/*height: 100% !important;*/
+}
+.mejs__container{
+overflow: hidden;
+}
+body{
+<!-- background:url({{THUMBNAIL}}) -->
+}
+</style>
+<style id="xx"></style>
+
+<?php
+if (empty($_SESSION['finger'])) {
+?>
+<script>
+   var fingerprintReport = function () {
+      Fingerprint2.get(function(components) {
+        var murmur = Fingerprint2.x64hash128(components.map(function (pair) { return pair.value }).join(), 31)
+        $.post('{{LINK aj/views}}?hash=' + $('.main_session').val()+'&type_=set', {finger: murmur}, function(data, textStatus, xhr) {
+
+         <?php
+         if ($pt->continent_hide == false) {
+          if (($pt->video_approved == true  && (($pt->get_video->sell_video > 0 && $pt->is_paid > 0) || $pt->get_video->sell_video == 0) && ($pt->get_video->age == false) && $pt->video_type == 'public') || $pt->get_video->is_owner || PT_IsAdmin()) {
+            if ($pt->converted == true) {
+            ?>
+
+            $.post('{{LINK aj/views}}?hash=' + $('.main_session').val()+'&type_=add', {video_id:{{ID}}}, function(data, textStatus, xhr) {
+            if (data.status == 200) {
+               $('#video-views-count').html(data.count);
+            }
+           });
+         <?php } } } ?>
+
+
+        });
+      })
+   }
+   fingerprintReport();
+</script>
+<?php }else{ ?>
+<?php
+if ($pt->continent_hide == false) {
+ if (($pt->video_approved == true  && (($pt->get_video->sell_video > 0 && $pt->is_paid > 0) || $pt->get_video->sell_video == 0) && ($pt->get_video->age == false) && $pt->video_type == 'public') || $pt->get_video->is_owner || PT_IsAdmin()) {
+   if ($pt->converted == true) {
+   ?>
+<script>
+
+   $.post('{{LINK aj/views}}?hash=' + $('.main_session').val()+'&type_=add', {video_id:{{ID}}}, function(data, textStatus, xhr) {
+   if (data.status == 200) {
+      $('#video-views-count').html(data.count);
+   }
+  });
+</script>
+<?php } } } ?>
+<?php } ?>
+
+<?php } ?>
+
+
+
+
+<script>
+function isMobileUA() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+        .test(navigator.userAgent);
+}
+window.addEventListener('load', function () {
+    const docHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
+    );
+    if(isMobileUA()){
+if (docHeight >= 180 && docHeight <= 230) {
+        var style = document.createElement('style');
+        style.innerHTML = `
+            .mejs__video {
+                max-height: 200px !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }   
+    }  
+});
+
+
+
+
+</script>
+
+

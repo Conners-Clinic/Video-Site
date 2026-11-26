@@ -1,0 +1,41 @@
+<!-- Twitter Card data -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@publisher_handle">
+<meta name="twitter:title" content="{{TITLE}}">
+<meta name="twitter:description" content="{{DESC}}">
+<meta name="twitter:creator" content="@author_handle">
+<meta name="twitter:image" content="{{THUMB}}">
+
+<!-- Open Graph data -->
+<meta property="og:title" content="{{TITLE}}" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="{{URL}}" />
+<meta property="og:image" content="{{THUMB}}" />
+<meta property="og:description" content="{{DESC}}" /> 
+<meta name="thumbnail" content="{{THUMB}}" />
+<?php if (!empty($pt->get_video)) { ?>
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "MusicGroup",
+    "image": [
+        "<?php echo $pt->get_video->thumbnail; ?>"
+    ],
+    "name": "<?php echo FilterStripTags($pt->get_video->title); ?>",
+    "subjectOf": {
+        "@type": "VideoObject",
+        "description": "<?php
+        $schema_desc = strip_tags($pt->get_video->markup_description);
+        if (!empty($pt->get_video->transcript_row) && !empty($pt->get_video->transcript_row->seo_summary)) {
+            $schema_desc = $pt->get_video->transcript_row->seo_summary;
+        }
+        echo FilterStripTags($schema_desc);
+        ?>",
+        "duration": "<?php echo time_to_iso8601_duration(strtotime($pt->get_video->duration)); ?>",
+        "name": "<?php echo FilterStripTags($pt->get_video->title); ?>",
+        "thumbnailUrl": "<?php echo $pt->get_video->thumbnail; ?>",
+        "uploadDate": "<?php echo date('c',$pt->get_video->time); ?>"
+    }
+}
+</script>
+<?php } ?>

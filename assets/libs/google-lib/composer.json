@@ -1,0 +1,14 @@
+{
+    "require": {
+        "google/cloud-storage": "^1.28",
+        "firebase/php-jwt": "^7.0",
+        "guzzlehttp/guzzle": "^7.15.2",
+        "guzzlehttp/psr7": "^2.12.3"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.35"
+        },
+        "allow-plugins": false
+    }
+}

@@ -1,0 +1,45 @@
+-- READ-ONLY inventory for a later summary rollout. Only SELECTs; safe on the live DB (run in phpMyAdmin or mysql).
+-- Public = privacy 0 and approved 1. Old summaries came from the first 6,000 characters of plain_text (before 11 Nov 2026 code).
+
+-- 1. Counts by group (a video falls in exactly one group)
+SELECT grp, COUNT(*) AS videos FROM (
+  SELECT v.id,
+    CASE
+      WHEN t.video_id IS NULL OR t.status <> 'completed' OR t.plain_text IS NULL OR t.plain_text = '' THEN '1_missing_transcript'
+      WHEN COALESCE(TRIM(t.seo_summary), '') = '' OR t.key_takeaways IS NULL OR JSON_LENGTH(t.key_takeaways) = 0 THEN '2_missing_summary_or_takeaways'
+      WHEN CHAR_LENGTH(t.plain_text) > 6000 THEN '3_summary_from_first_6000_chars_only'
+      ELSE '4_summary_already_covers_whole_transcript'
+    END AS grp
+  FROM videos v
+  LEFT JOIN video_transcripts t ON t.video_id = v.id
+  WHERE v.privacy = 0 AND v.approved = 1
+) x GROUP BY grp ORDER BY grp;
+
+-- 2. Group 3 detail, biggest gap first (chars the old summary never saw)
+SELECT v.id, v.title, CHAR_LENGTH(t.plain_text) AS transcript_chars, CHAR_LENGTH(t.plain_text) - 6000 AS chars_never_seen,
+       ROUND(CHAR_LENGTH(t.plain_text) / 4) AS est_tokens
+FROM videos v JOIN video_transcripts t ON t.video_id = v.id
+WHERE v.privacy = 0 AND v.approved = 1 AND t.status = 'completed'
+  AND COALESCE(TRIM(t.seo_summary), '') <> '' AND CHAR_LENGTH(t.plain_text) > 6000
+ORDER BY chars_never_seen DESC;
+
+-- 3. Cost estimate for group 2 + 3 (Luna list price: $0.10 per 1M input tokens, ~$0.002 for a 13K-token video incl. output)
+SELECT COUNT(*) AS videos, ROUND(SUM(CHAR_LENGTH(t.plain_text) / 4)) AS est_input_tokens,
+       ROUND(SUM(CHAR_LENGTH(t.plain_text) / 4) / 1000000 * 0.10 + COUNT(*) * 0.0015, 2) AS est_usd
+FROM videos v JOIN video_transcripts t ON t.video_id = v.id
+WHERE v.privacy = 0 AND v.approved = 1 AND t.status = 'completed' AND t.plain_text <> ''
+  AND (COALESCE(TRIM(t.seo_summary), '') = '' OR t.key_takeaways IS NULL OR CHAR_LENGTH(t.plain_text) > 6000);
+
+-- 4. Group 1 detail: why is there no usable transcript?
+SELECT v.id, v.title, COALESCE(t.status, 'no transcript row') AS state, t.error_message
+FROM videos v LEFT JOIN video_transcripts t ON t.video_id = v.id
+WHERE v.privacy = 0 AND v.approved = 1
+  AND (t.video_id IS NULL OR t.status <> 'completed' OR t.plain_text IS NULL OR t.plain_text = '')
+ORDER BY state, v.id;
+
+-- 5. Candidates for the FIRST live test: transcribed, public, long enough that the old cut-off missed the ending
+SELECT v.id, v.title, CHAR_LENGTH(t.plain_text) AS transcript_chars, LEFT(t.seo_summary, 120) AS current_about
+FROM videos v JOIN video_transcripts t ON t.video_id = v.id
+WHERE v.privacy = 0 AND v.approved = 1 AND t.status = 'completed'
+  AND CHAR_LENGTH(t.plain_text) BETWEEN 9000 AND 40000 AND COALESCE(TRIM(t.seo_summary), '') <> ''
+ORDER BY RAND() LIMIT 10;

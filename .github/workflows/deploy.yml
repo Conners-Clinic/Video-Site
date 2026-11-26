@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - super
+    # Skip pushes whose every changed file is a Continuity file: checkpoint
+    # records, or a tooling update from continuity-manager (.continuity/ plus
+    # its three skills). Any push that also changes anything else deploys.
+    paths-ignore:
+      - '.continuity/**'
+      - '.agents/skills/handoff/**'
+      - '.agents/skills/pickup/**'
+      - '.agents/skills/continuity-onboard/**'
+      - '.claude/skills/handoff'
+      - '.claude/skills/pickup'
+      - '.claude/skills/continuity-onboard'
+      - '.claude/skills/handoff/**'
+      - '.claude/skills/pickup/**'
+      - '.claude/skills/continuity-onboard/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-test:
+    name: Deploy to test-videos
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH Password
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /home/admin/web/test-videos.connersclinic.com/public_html/
+            git fetch origin
+            git reset --hard origin/main
+
+  deploy-production:
+    name: Deploy to production
+    if: github.ref == 'refs/heads/super'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Deploy via SSH Password
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /home/admin/web/videos.connersclinic.com/public_html/
+            git fetch origin
+            git checkout -B super origin/super

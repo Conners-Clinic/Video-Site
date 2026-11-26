@@ -1,0 +1,435 @@
+<?php
+$channels = PT_GetTranscriptChannels(array('purpose' => 'seo'));
+$models = PT_LoadSeoPipelineModels();
+?>
+<div class="container-fluid seo-articles-admin">
+    <div>
+        <h3>SEO Articles</h3>
+        <p class="text-muted">Post-transcription pipeline: clean transcript → entities → SEO blueprint → blog article. Does not modify raw transcripts in <code>video_transcripts.plain_text</code>.</p>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="#">Admin Panel</a></li>
+                <li class="breadcrumb-item active">SEO Articles</li>
+            </ol>
+        </nav>
+    </div>
+
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="active"><a href="#seo-tab-videos" data-toggle="tab">Videos</a></li>
+        <li><a href="#seo-tab-detail" data-toggle="tab">Article detail</a></li>
+        <li><a href="#seo-tab-review" data-toggle="tab">Entity review</a></li>
+        <li><a href="#seo-tab-config" data-toggle="tab">Prompts &amp; standards</a></li>
+        <li><a href="#seo-tab-settings" data-toggle="tab">Settings</a></li>
+    </ul>
+
+    <div class="tab-content m-t-15">
+        <div class="tab-pane active" id="seo-tab-videos">
+            <div class="card">
+                <div class="card-body">
+                    <div class="seo-alert-videos"></div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label>Channel</label>
+                            <select id="seo-channel-id" class="form-control">
+                                <option value="">All channels</option>
+                                <?php if (!empty($channels)) { foreach ($channels as $ch) { ?>
+                                <option value="<?php echo (int) $ch->id; ?>"><?php echo htmlspecialchars(PT_FormatTranscriptChannelLabel($ch, 'seo')); ?></option>
+                                <?php } } ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label>Batch limit</label>
+                            <input type="number" id="seo-batch-limit" class="form-control" value="5" min="1" max="25">
+                        </div>
+                        <div class="col-md-4 m-t-25">
+                            <button type="button" class="btn btn-primary" id="seo-refresh-videos">Refresh list</button>
+                            <button type="button" class="btn btn-success" id="seo-batch-queue">Batch queue</button>
+                        </div>
+                    </div>
+                    <p class="text-muted m-t-10">Queue status: <span id="seo-queue-status">—</span>. Cron: <code>*/15 * * * * curl -s <?php echo $pt->config->site_url; ?>/seo-pipeline-cron.php</code></p>
+                    <table class="table table-striped m-t-15" id="seo-videos-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>SEO status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="seo-tab-detail">
+            <div class="card">
+                <div class="card-body">
+                    <div class="seo-alert-detail"></div>
+                    <div class="form-inline m-b-15">
+                        <input type="number" id="seo-detail-video-id" class="form-control" placeholder="Video ID">
+                        <button type="button" class="btn btn-primary m-l-10" id="seo-load-detail">Load</button>
+                        <button type="button" class="btn btn-success m-l-10" id="seo-generate-one">Generate SEO article</button>
+                        <button type="button" class="btn btn-warning m-l-10" id="seo-run-one-step">Run next step (sync)</button>
+                        <button type="button" class="btn btn-default m-l-10" id="seo-rerun-pass0">Re-run Pass 0</button>
+                    </div>
+                    <p><strong>Status:</strong> <span id="seo-detail-status">—</span> <span id="seo-detail-error" class="text-danger"></span></p>
+                    <p><strong>SEO title:</strong> <span id="seo-detail-title">—</span> | <strong>Slug:</strong> <span id="seo-detail-slug">—</span></p>
+
+                    <ul class="nav nav-pills m-t-15">
+                        <li class="active"><a href="#seo-out-raw" data-toggle="tab">Raw transcript</a></li>
+                        <li><a href="#seo-out-cleaned" data-toggle="tab">Cleaned</a></li>
+                        <li><a href="#seo-out-compare" data-toggle="tab">Compare</a></li>
+                        <li><a href="#seo-out-quality" data-toggle="tab">Quality</a></li>
+                        <li><a href="#seo-out-blueprint" data-toggle="tab">Blueprint</a></li>
+                        <li><a href="#seo-out-draft" data-toggle="tab">Draft</a></li>
+                        <li><a href="#seo-out-audit" data-toggle="tab">Audit</a></li>
+                        <li><a href="#seo-out-final" data-toggle="tab">Final article</a></li>
+                        <li><a href="#seo-out-entities" data-toggle="tab">Entities</a></li>
+                        <li><a href="#seo-out-logs" data-toggle="tab">Logs</a></li>
+                    </ul>
+                    <div class="tab-content m-t-10">
+                        <div class="tab-pane active" id="seo-out-raw"><pre class="seo-pre" id="seo-pre-raw"></pre></div>
+                        <div class="tab-pane" id="seo-out-cleaned"><pre class="seo-pre" id="seo-pre-cleaned"></pre></div>
+                        <div class="tab-pane" id="seo-out-compare"><pre class="seo-pre" id="seo-pre-compare"></pre></div>
+                        <div class="tab-pane" id="seo-out-quality"><pre class="seo-pre" id="seo-pre-quality"></pre></div>
+                        <div class="tab-pane" id="seo-out-blueprint"><pre class="seo-pre" id="seo-pre-blueprint"></pre></div>
+                        <div class="tab-pane" id="seo-out-draft"><pre class="seo-pre" id="seo-pre-draft"></pre></div>
+                        <div class="tab-pane" id="seo-out-audit"><pre class="seo-pre" id="seo-pre-audit"></pre></div>
+                        <div class="tab-pane" id="seo-out-final">
+                            <textarea class="form-control" id="seo-final-editor" rows="20"></textarea>
+                            <button type="button" class="btn btn-primary m-t-10" id="seo-save-final">Save final article</button>
+                            <button type="button" class="btn btn-default m-t-10" id="seo-copy-final">Copy final</button>
+                        </div>
+                        <div class="tab-pane" id="seo-out-entities"><pre class="seo-pre" id="seo-pre-entities"></pre></div>
+                        <div class="tab-pane" id="seo-out-logs"><pre class="seo-pre" id="seo-pre-logs"></pre></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="seo-tab-review">
+            <div class="card">
+                <div class="card-body">
+                    <div class="seo-alert-review"></div>
+                    <button type="button" class="btn btn-primary" id="seo-refresh-review">Refresh queue</button>
+                    <table class="table table-striped m-t-15" id="seo-review-table">
+                        <thead>
+                            <tr>
+                                <th>Entity</th>
+                                <th>Category</th>
+                                <th>Priority</th>
+                                <th>Action</th>
+                                <th>Match</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="seo-tab-config">
+            <div class="card">
+                <div class="card-body">
+                    <div class="seo-alert-config"></div>
+                    <div class="form-inline m-b-15">
+                        <select id="seo-config-type" class="form-control">
+                            <option value="prompts">Prompt templates</option>
+                            <option value="standards">Editorial standards</option>
+                            <option value="entity_library">Entity library</option>
+                            <option value="models">Model config</option>
+                        </select>
+                        <select id="seo-config-file" class="form-control m-l-10"></select>
+                        <button type="button" class="btn btn-primary m-l-10" id="seo-load-config">Load</button>
+                        <button type="button" class="btn btn-success m-l-10" id="seo-save-config">Save</button>
+                    </div>
+                    <textarea id="seo-config-editor" class="form-control" rows="24" style="font-family:monospace;font-size:12px;"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="seo-tab-settings">
+            <div class="card">
+                <div class="card-body">
+                    <div class="seo-alert-settings"></div>
+                    <form id="seo-settings-form">
+                        <div class="form-group">
+                            <label>Pipeline system</label>
+                            <select name="seo_pipeline_system" class="form-control">
+                                <option value="off" <?php echo (($pt->config->seo_pipeline_system ?? 'on') != 'on') ? 'selected' : ''; ?>>Off</option>
+                                <option value="on" <?php echo (($pt->config->seo_pipeline_system ?? 'on') == 'on') ? 'selected' : ''; ?>>On</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Jobs per cron run</label>
+                            <input type="number" name="seo_pipeline_queue_count" class="form-control" min="1" max="3" value="<?php echo (int) ($pt->config->seo_pipeline_queue_count ?? 1); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Max concurrent processing</label>
+                            <input type="number" name="seo_pipeline_max_concurrent" class="form-control" min="1" max="3" value="<?php echo (int) ($pt->config->seo_pipeline_max_concurrent ?? 1); ?>">
+                        </div>
+                        <hr>
+                        <h6>Models per pass (overrides pipeline-models.json)</h6>
+                        <?php
+                        $model_labels = array(
+                            'summary' => 'Summary and takeaways',
+                            'summary_sections' => 'Long-transcript sections',
+                            'json_repair' => 'JSON repair',
+                            'pass_0' => 'Pass 0 clean',
+                            'entity_extraction' => 'Entity extraction',
+                            'entity_comparison' => 'Entity comparison',
+                            'entity_review_queue' => 'Review queue',
+                            'pass_1' => 'Pass 1 blueprint',
+                            'pass_2' => 'Pass 2 article',
+                            'pass_3' => 'Pass 3 audit',
+                            'pass_4' => 'Pass 4 revision',
+                        );
+                        foreach ($model_labels as $key => $label) {
+                            $cfg_key = 'seo_pipeline_model_' . $key;
+                            $val = !empty($pt->config->{$cfg_key}) ? $pt->config->{$cfg_key} : ($models[$key] ?? '');
+                            echo '<div class="form-group"><label>' . htmlspecialchars($label) . '</label>';
+                            echo '<input type="text" class="form-control" name="' . htmlspecialchars($cfg_key) . '" value="' . htmlspecialchars($val) . '"></div>';
+                        }
+                        ?>
+                        <button type="submit" class="btn btn-primary">Save settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.seo-pre { max-height: 400px; overflow: auto; background: #f8f9fa; padding: 12px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+</style>
+
+<script>
+(function() {
+    var ajBase = '<?php echo PT_Link("aj/ap/"); ?>';
+
+    function alertBox(sel, msg, ok) {
+        $(sel).html('<div class="alert alert-' + (ok ? 'success' : 'danger') + '">' + msg + '</div>');
+    }
+
+    function refreshQueueStatus() {
+        $.get(ajBase + 'seo_pipeline_queue_status', function(r) {
+            if (r.pending !== undefined) {
+                $('#seo-queue-status').text(r.pending + ' pending, ' + r.running + ' running');
+            }
+        });
+    }
+
+    function loadVideos() {
+        var channel = $('#seo-channel-id').val();
+        $.get(ajBase + 'seo_pipeline_list_videos', { channel_id: channel, page: 1 }, function(r) {
+            var $tb = $('#seo-videos-table tbody').empty();
+            if (!r.videos || !r.videos.length) {
+                $tb.append('<tr><td colspan="4">No videos with completed transcripts.</td></tr>');
+                return;
+            }
+            r.videos.forEach(function(v) {
+                var st = v.seo_status || '—';
+                var tr = '<tr><td>' + v.video_id + '</td><td>' + $('<div>').text(v.title).html() + '</td><td><code>' + st + '</code></td><td>' +
+                    '<button class="btn btn-xs btn-primary seo-open-detail" data-id="' + v.video_id + '">Open</button> ' +
+                    '<button class="btn btn-xs btn-success seo-gen" data-id="' + v.video_id + '">Generate</button></td></tr>';
+                $tb.append(tr);
+            });
+        });
+    }
+
+    function loadDetail(videoId) {
+        $('#seo-detail-video-id').val(videoId);
+        $.get(ajBase + 'seo_pipeline_get_article', { video_id: videoId }, function(r) {
+            if (r.status !== 200) {
+                alertBox('.seo-alert-detail', r.message || 'Error', false);
+                return;
+            }
+            var a = r.article || {};
+            $('#seo-detail-status').text(a.status || '—');
+            $('#seo-detail-error').text(a.error_message || '');
+            $('#seo-detail-title').text(a.seo_title || '—');
+            $('#seo-detail-slug').text(a.url_slug || '—');
+            $('#seo-pre-raw').text(a.raw_transcript || '');
+            $('#seo-pre-cleaned').text(a.cleaned_transcript || '');
+            var compare = '--- RAW (first 3000 chars) ---\n' + (a.raw_transcript || '').substring(0, 3000) +
+                '\n\n--- CLEANED (first 3000 chars) ---\n' + (a.cleaned_transcript || '').substring(0, 3000);
+            $('#seo-pre-compare').text(compare);
+            $('#seo-pre-quality').text(a.transcript_quality ? JSON.stringify(a.transcript_quality, null, 2) : '—');
+            $('#seo-pre-blueprint').text(a.seo_blueprint || '');
+            $('#seo-pre-draft').text(a.draft_article_markdown || '');
+            $('#seo-pre-audit').text(a.seo_audit ? JSON.stringify(a.seo_audit, null, 2) : '');
+            $('#seo-final-editor').val(a.final_article_markdown || '');
+            var ent = { extraction: a.entity_extraction_output, comparison: a.entity_comparison_output, review: a.entity_review_queue_output };
+            $('#seo-pre-entities').text(JSON.stringify(ent, null, 2));
+            var logs = '';
+            (r.logs || []).forEach(function(l) {
+                logs += l.pass_name + ' | ' + l.model_used + ' | ' + l.status + ' | ' + (l.error_message || '') + '\n';
+            });
+            $('#seo-pre-logs').text(logs || '—');
+        });
+    }
+
+    function generateVideo(videoId, rerunFrom, force) {
+        $.post(ajBase + 'seo_pipeline_generate', { video_id: videoId, rerun_from: rerunFrom || '', force: force ? 1 : 0 }, function(r) {
+            if (r.status === 409 && r.needs_rerun_choice) {
+                var choice = prompt('Article exists. Rerun: pass_0, pass_1, pass_2, pass_4, or cancel', 'pass_0');
+                if (choice && choice !== 'cancel') {
+                    generateVideo(videoId, choice, 1);
+                }
+                return;
+            }
+            alertBox('.seo-alert-detail', r.message || (r.status === 200 ? 'Queued' : 'Error'), r.status === 200);
+            if (r.status === 200) {
+                refreshQueueStatus();
+                loadDetail(videoId);
+            }
+        });
+    }
+
+    $('#seo-refresh-videos, #seo-channel-id').on('click change', function(e) {
+        if (e.type === 'change' && e.target.id !== 'seo-channel-id') return;
+        loadVideos();
+        refreshQueueStatus();
+    });
+
+    $('#seo-batch-queue').on('click', function() {
+        $.post(ajBase + 'seo_pipeline_batch', {
+            channel_id: $('#seo-channel-id').val(),
+            batch_limit: $('#seo-batch-limit').val()
+        }, function(r) {
+            alertBox('.seo-alert-videos', r.message, r.status === 200);
+            refreshQueueStatus();
+            loadVideos();
+        });
+    });
+
+    $(document).on('click', '.seo-open-detail', function() {
+        var id = $(this).data('id');
+        $('a[href="#seo-tab-detail"]').tab('show');
+        loadDetail(id);
+    });
+
+    $(document).on('click', '.seo-gen', function() {
+        generateVideo($(this).data('id'));
+    });
+
+    $('#seo-load-detail').on('click', function() {
+        loadDetail($('#seo-detail-video-id').val());
+    });
+
+    $('#seo-generate-one').on('click', function() {
+        generateVideo($('#seo-detail-video-id').val());
+    });
+
+    $('#seo-run-one-step').on('click', function() {
+        var vid = $('#seo-detail-video-id').val();
+        $('#seo-run-one-step').prop('disabled', true);
+        $.post(ajBase + 'seo_pipeline_run_step', { video_id: vid }, function(r) {
+            alertBox('.seo-alert-detail', r.message || r.error || (r.ok ? 'Step OK: ' + r.article_status : 'Failed'), !!r.ok);
+            loadDetail(vid);
+            $('#seo-run-one-step').prop('disabled', false);
+        });
+    });
+
+    $('#seo-rerun-pass0').on('click', function() {
+        $.post(ajBase + 'seo_pipeline_rerun_pass0', { video_id: $('#seo-detail-video-id').val() }, function(r) {
+            alertBox('.seo-alert-detail', r.message, r.status === 200);
+            refreshQueueStatus();
+        });
+    });
+
+    $('#seo-save-final').on('click', function() {
+        $.post(ajBase + 'seo_pipeline_save_article', {
+            video_id: $('#seo-detail-video-id').val(),
+            final_article_markdown: $('#seo-final-editor').val()
+        }, function(r) {
+            alertBox('.seo-alert-detail', r.message, r.status === 200);
+        });
+    });
+
+    $('#seo-copy-final').on('click', function() {
+        var t = $('#seo-final-editor').val();
+        navigator.clipboard.writeText(t).then(function() {
+            alertBox('.seo-alert-detail', 'Copied to clipboard', true);
+        });
+    });
+
+    function loadReview() {
+        $.get(ajBase + 'seo_pipeline_review_list', { status: 'pending' }, function(r) {
+            var $tb = $('#seo-review-table tbody').empty();
+            (r.items || []).forEach(function(item) {
+                var tr = '<tr><td>' + $('<div>').text(item.entity_name).html() + '</td><td>' + item.category + '</td><td>' + item.priority + '</td><td>' + item.recommended_action + '</td><td>' + (item.possible_existing_match || '') + '</td><td>' +
+                    '<button class="btn btn-xs btn-success seo-review-act" data-id="' + item.review_id + '" data-act="approve_new">Approve</button> ' +
+                    '<button class="btn btn-xs btn-info seo-review-act" data-id="' + item.review_id + '" data-act="merge_existing">Merge</button> ' +
+                    '<button class="btn btn-xs btn-warning seo-review-act" data-id="' + item.review_id + '" data-act="create_alias">Alias</button> ' +
+                    '<button class="btn btn-xs btn-default seo-review-act" data-id="' + item.review_id + '" data-act="ignore">Ignore</button></td></tr>';
+                $tb.append(tr);
+            });
+        });
+    }
+
+    $(document).on('click', '.seo-review-act', function() {
+        var id = $(this).data('id');
+        var act = $(this).data('act');
+        var extra = {};
+        if (act === 'merge_existing' || act === 'create_alias') {
+            extra.existing_entity = prompt('Existing entity name to merge into:');
+            if (!extra.existing_entity) return;
+        }
+        $.post(ajBase + 'seo_pipeline_review_action', $.extend({ review_id: id, action: act }, extra), function(r) {
+            alertBox('.seo-alert-review', r.message || r.error, r.status === 200);
+            loadReview();
+        });
+    });
+
+    $('#seo-refresh-review').on('click', loadReview);
+
+    var configFiles = [];
+    function loadConfigFileList() {
+        var type = $('#seo-config-type').val();
+        $.get(ajBase + 'seo_pipeline_get_config_files', { type: type }, function(r) {
+            configFiles = r.files || [];
+            var $sel = $('#seo-config-file').empty();
+            configFiles.forEach(function(f, i) {
+                $sel.append('<option value="' + i + '">' + (f.slug || f.label || i) + '</option>');
+            });
+            if (configFiles.length) {
+                $('#seo-config-editor').val(configFiles[0].content || '');
+            }
+        });
+    }
+
+    $('#seo-config-type').on('change', loadConfigFileList);
+    $('#seo-config-file').on('change', function() {
+        var i = parseInt($(this).val(), 10);
+        if (configFiles[i]) $('#seo-config-editor').val(configFiles[i].content || '');
+    });
+    $('#seo-load-config').on('click', loadConfigFileList);
+    $('#seo-save-config').on('click', function() {
+        var type = $('#seo-config-type').val();
+        var i = parseInt($('#seo-config-file').val(), 10);
+        var f = configFiles[i];
+        if (!f) return;
+        $.post(ajBase + 'seo_pipeline_save_config_file', {
+            type: type,
+            slug: f.slug,
+            content: $('#seo-config-editor').val()
+        }, function(r) {
+            alertBox('.seo-alert-config', r.message, r.status === 200);
+        });
+    });
+
+    $('#seo-settings-form').on('submit', function(e) {
+        e.preventDefault();
+        $.post(ajBase + 'seo_pipeline_settings', $(this).serialize(), function(r) {
+            alertBox('.seo-alert-settings', r.message, r.status === 200);
+        });
+    });
+
+    loadVideos();
+    refreshQueueStatus();
+    loadConfigFileList();
+})();
+</script>

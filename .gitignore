@@ -1,0 +1,92 @@
+# User uploads and generated media
+/upload/video/
+/upload/videos/
+/upload/photos/
+/upload/images/
+/upload/audio/
+/upload/files/
+/upload/import/
+/upload/tmp/
+/upload/temp/
+/upload/transcripts/
+
+# Generated changes and import files
+/changes/
+/assets/import/
+
+# Node dependencies
+/node_modules/
+
+# Composer dependencies
+# Remove this line if your deployment requires vendor to be committed
+/vendor/
+
+# Sass cache
+/themes/default/css/.sass-cache/
+.sass-cache/
+
+# Sensitive local configuration
+/config.php
+#/db.php
+#/merge.php
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.cache
+*.pid
+nohup.out
+
+# Database backups
+*.sql
+*.sql.gz
+*.dump
+
+# Archives and backups
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.bak
+*.backup
+*.old
+
+# PlayTube backups
+/bac.zip
+/backup/
+/backups/
+
+# Node package logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE files
+/.idea/
+/.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Git temporary files
+*.orig
+*.rej
+# Server-local credentials and incident artifacts
+/nodejs/config.json
+/web/index.php
+/web/test.php
+*.bk
+/cache/
+/tmp/
+/Script/

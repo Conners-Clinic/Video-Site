@@ -1,0 +1,45 @@
+{
+  "file_name": "brand-standards.json",
+  "brand_names": {
+    "Connors Clinic": "Conners Clinic",
+    "Connor's Clinic": "Conners Clinic",
+    "Conner's Clinic": "Conners Clinic"
+  },
+  "people": {
+    "Doctor Conners": "Dr. Kevin Conners",
+    "Dr Conners": "Dr. Kevin Conners",
+    "Kevin Conners": "Dr. Kevin Conners",
+    "Dr. Conners": "Dr. Kevin Conners"
+  },
+  "services": {
+    "case review": "Case Review",
+    "discovery call": "Discovery Call",
+    "free discovery call": "Free Discovery Call",
+    "personalized protocol": "personalized protocol",
+    "custom protocol": "personalized protocol"
+  },
+  "products_and_tools": {
+    "Rife Machine": "Rife machine",
+    "Rife Machines": "Rife machines",
+    "AR Rife": "AR Rife Machine",
+    "Atelier Robin": "Atelier Robin",
+    "True Rife": "True Rife",
+    "PEMF": "PEMF",
+    "PBM": "PBM",
+    "LBG": "Light Beam Generator",
+    "hyperthermia": "hyperthermia",
+    "photobiomodulation": "photobiomodulation",
+    "custom programmed rife machine": "custom-programmed Rife machine"
+  },
+  "protected_terms": [
+    "Conners Clinic",
+    "Dr. Kevin Conners",
+    "Case Review",
+    "Discovery Call",
+    "Rife machine",
+    "AR Rife Machine",
+    "Atelier Robin",
+    "personalized protocol",
+    "custom-programmed Rife machine"
+  ]
+}

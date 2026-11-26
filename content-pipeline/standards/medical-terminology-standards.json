@@ -1,0 +1,39 @@
+{
+  "file_name": "medical-terminology-standards.json",
+  "condition_terms": {
+    "lyme": "Lyme disease",
+    "auto immune": "autoimmune",
+    "auto-immune": "autoimmune",
+    "brain inflammation": "brain inflammation",
+    "chronic fatigue": "chronic fatigue",
+    "digestive issues": "digestive health concerns",
+    "gut issues": "gut health concerns"
+  },
+  "therapy_terms": {
+    "rife": "Rife",
+    "hyperthermia": "hyperthermia",
+    "PEMF": "PEMF",
+    "PBM": "PBM",
+    "photobiomodulation": "photobiomodulation",
+    "frequency therapy": "frequency-based support",
+    "terrain": "terrain",
+    "terrain theory": "terrain theory",
+    "detox": "detoxification support",
+    "immune support": "immune support"
+  },
+  "protected_terms": [
+    "integrative cancer care",
+    "holistic health",
+    "functional medicine",
+    "root-cause approach",
+    "personalized protocol",
+    "immune support",
+    "detoxification support",
+    "Rife technology",
+    "frequency-based support",
+    "PEMF",
+    "PBM",
+    "photobiomodulation",
+    "hyperthermia"
+  ]
+}

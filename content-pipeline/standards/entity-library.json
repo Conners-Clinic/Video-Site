@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "conners-clinic": {
+      "name": "Conners Clinic",
+      "category": "organizations",
+      "slug": "conners-clinic",
+      "aliases": ["Connors Clinic", "Connor's Clinic", "Conner's Clinic"],
+      "status": "active"
+    },
+    "dr-kevin-conners": {
+      "name": "Dr. Kevin Conners",
+      "category": "people",
+      "slug": "dr-kevin-conners",
+      "aliases": ["Doctor Conners", "Dr Conners", "Kevin Conners", "Dr. Conners"],
+      "status": "active"
+    },
+    "rife-machine": {
+      "name": "Rife machine",
+      "category": "technologies",
+      "slug": "rife-machine",
+      "aliases": ["Rife Machine", "Rife machines", "Rife Machines"],
+      "status": "active"
+    },
+    "ar-rife-machine": {
+      "name": "AR Rife Machine",
+      "category": "technologies",
+      "slug": "ar-rife-machine",
+      "aliases": ["AR Rife"],
+      "status": "active"
+    },
+    "atelier-robin": {
+      "name": "Atelier Robin",
+      "category": "organizations",
+      "slug": "atelier-robin",
+      "aliases": [],
+      "status": "active"
+    },
+    "true-rife": {
+      "name": "True Rife",
+      "category": "technologies",
+      "slug": "true-rife",
+      "aliases": [],
+      "status": "active"
+    },
+    "case-review": {
+      "name": "Case Review",
+      "category": "services",
+      "slug": "case-review",
+      "aliases": ["case review"],
+      "status": "active"
+    },
+    "discovery-call": {
+      "name": "Discovery Call",
+      "category": "services",
+      "slug": "discovery-call",
+      "aliases": ["discovery call", "free discovery call", "Free Discovery Call"],
+      "status": "active"
+    },
+    "integrative-cancer-care": {
+      "name": "integrative cancer care",
+      "category": "concepts",
+      "slug": "integrative-cancer-care",
+      "aliases": ["holistic cancer care"],
+      "status": "active"
+    },
+    "lyme-disease": {
+      "name": "Lyme disease",
+      "category": "conditions",
+      "slug": "lyme-disease",
+      "aliases": ["lyme", "Lyme"],
+      "status": "active"
+    }
+  }
+}

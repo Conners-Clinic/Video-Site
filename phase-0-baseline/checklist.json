@@ -1,0 +1,47 @@
+{
+  "phase": 0,
+  "branch": "feature/watch-page-redesign-v2",
+  "baseline_commit": "5fad7ed",
+  "captured_at": "2026-06-04",
+  "reference_url": "https://videos.connersclinic.com/watch/interpreting-dutch-test-results_cks3G6F4kQzXkVv.html",
+  "screenshots": [
+    "phase-0-baseline-desktop-1440.png",
+    "phase-0-baseline-mobile-375.png"
+  ],
+  "layout_contract": {
+    "comments": "main column, below video description / VIDEO_DESC_TABS",
+    "sidebar_desktop": "categories, up next, related videos — not comments",
+    "sidebar_mobile": "below main content on viewports under 1024px"
+  },
+  "verified_on_production": {
+    "comments_in_main_column": true,
+    "sidebar_has_categories_and_up_next": true,
+    "reverted_redesign_deployed": true
+  },
+  "phase_1": {
+    "status": "complete",
+    "approach": "css_only_no_column_moves",
+    "files": [
+      "themes/youplay/css/watch-content.css",
+      "themes/youplay/css/night-mode.css",
+      "themes/default/css/watch-content.css"
+    ]
+  },
+  "phase_2": {
+    "status": "complete",
+    "approach": "minimal_markup_inside_existing_columns",
+    "files": [
+      "themes/youplay/layout/watch/content.html",
+      "themes/youplay/css/watch-content.css",
+      "themes/default/css/watch-content.css"
+    ],
+    "hooks": [
+      "watch-player-shell",
+      "watch-player-badge",
+      "watch-player-duration",
+      "watch-meta-bar",
+      "watch-cat-active",
+      "watch-sidebar-col"
+    ]
+  }
+}

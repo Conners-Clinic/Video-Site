@@ -1,0 +1,30 @@
+PHP 8.2 compatibility changes (2026-10-30)
+
+Target: PHP 8.2.35 with the existing mysqli, mbstring, XML, GD and cURL extensions.
+
+The existing application routes and database schema are preserved. Changes fix
+obsolete implode argument order, ambiguous dynamic language-property lookups,
+temporary arrays passed by reference, and mixed language-list/modal markup types.
+
+The bundled RSS subclass now declares the parent's compatible return type.
+Payment verification keeps its existing argument order and no longer declares
+an optional argument before a required one. JWT/AWS string interpolation uses
+PHP 8.2 syntax. ISO-8859-1 conversions retain their prior encoding semantics.
+Paysera handles the removed magic-quotes API and thumbnail paths no longer use
+the removed spliti function. The AWS SSO cache filename retains the same SHA-1
+hexadecimal string, without a deprecated no-op encoding conversion.
+
+getID3 is updated to upstream v1.9.27. The legacy directory name remains in use
+to preserve include paths. Only the runtime, documentation and license files are
+deployed; old interactive demos and the obsolete mysql-extension cache add-on
+are excluded. Source: https://github.com/JamesHeinrich/getID3/releases/tag/v1.9.27
+
+Run offline regressions without contacting payment or cloud services:
+  php8.2 -d allow_url_include=0 tests/php82-compatibility.php
+
+The small compatibility edits to bundled vendor files must be retained or
+replaced with equivalent upstream fixes when those Composer packages are
+updated. Guarded branches for older PHP versions and JavaScript template/demo
+syntax are reviewed separately from executable PHP compatibility errors.
+
+No database credentials, authentication settings or database schema are changed.

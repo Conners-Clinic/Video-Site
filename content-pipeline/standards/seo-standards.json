@@ -1,0 +1,54 @@
+{
+  "file_name": "seo-standards.json",
+  "primary_topic_defaults": {
+    "default_audience": "cancer patients, caregivers, and people researching integrative or holistic cancer care",
+    "default_angle": "cancer-focused unless the transcript clearly indicates another topic",
+    "default_search_intent": "informational"
+  },
+  "keyword_normalization": {
+    "holistic cancer treatment": "holistic cancer care",
+    "natural cancer treatment": "natural cancer support",
+    "cancer alternatives": "integrative cancer care options",
+    "root cause cancer": "root-cause cancer support",
+    "rife cancer": "Rife machine for cancer support"
+  },
+  "capitalization_rules": {
+    "conners clinic": "Conners Clinic",
+    "dr. kevin conners": "Dr. Kevin Conners",
+    "rife machine": "Rife machine",
+    "ar rife machine": "AR Rife Machine",
+    "atelier robin": "Atelier Robin",
+    "true rife": "True Rife",
+    "case review": "Case Review",
+    "discovery call": "Discovery Call",
+    "zoom": "Zoom"
+  },
+  "internal_link_topics": [
+    "integrative cancer care",
+    "Rife machine",
+    "personalized protocols",
+    "root-cause approach",
+    "functional medicine and cancer",
+    "nutrition and cancer support",
+    "supplements for cancer support",
+    "detoxification support",
+    "immune support",
+    "Conners Clinic Case Review",
+    "Free Discovery Call with Dr. Kevin Conners"
+  ],
+  "protected_terms": [
+    "integrative cancer care",
+    "holistic cancer care",
+    "natural cancer support",
+    "Rife machine for cancer support",
+    "Free Discovery Call with Dr. Kevin Conners",
+    "Conners Clinic Case Review"
+  ],
+  "article_requirements": {
+    "default_faq_count": 15,
+    "minimum_internal_links": 10,
+    "default_word_count": 2500,
+    "default_tone": "educational",
+    "default_reading_level": "general public"
+  }
+}
