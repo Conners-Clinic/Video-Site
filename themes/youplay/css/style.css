@@ -926,17 +926,15 @@ header{height: 56px;padding: 0 16px;box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);bac
 .pt_header_nav {display: flex;align-items: center;border: 0;justify-content: space-between;}
 .pt_header_nav:before, .pt_header_nav:after {display: none;}
 .pt_header_nav .left-part, .pt_header_nav .right-part {display: flex;align-items: center;-webkit-flex: 0 0 auto;-ms-flex: 0 0 auto;flex: 0 0 auto;background: transparent !important;}
-nav.navbar-findcond .yp_slide_menu span {cursor: pointer;position: relative;padding: 6px;margin: 10px 5px;display: flex;color: #696969;}
-#open_slide.slide-toggle-btn {display: inline-flex;align-items: center;justify-content: center;width: 36px;height: 36px;flex: 0 0 36px;padding: 0;}
+nav.navbar-findcond .yp_slide_menu .slide-toggle-btn {cursor: pointer;position: relative;padding: 6px;margin: 10px 5px;display: flex;color: #696969;}
+#open_slide.slide-toggle-btn {border: 0;background: transparent;display: inline-flex;align-items: center;justify-content: center;width: 36px;height: 36px;flex: 0 0 36px;padding: 0;}
+#open_slide:focus-visible, .sidebar-close:focus-visible {outline: 2px solid #456525;outline-offset: 2px;}
+.sidebar-close {border: 0;background: transparent;color: inherit;padding: 10px;cursor: pointer;}
 #open_slide .slide-toggle-icon {display: block;width: 24px;height: 24px;flex: 0 0 24px;}
 #open_slide .slide-toggle-chevron {display: none !important;}
 #open_slide .slide-toggle-chevron--expand {display: block !important;}
-body.side_open #open_slide .slide-toggle-chevron--expand,
-body.mobi_side_open #open_slide .slide-toggle-chevron--expand,
-#open_slide.is-sidebar-open .slide-toggle-chevron--expand {display: none !important;}
-body.side_open #open_slide .slide-toggle-chevron--collapse,
-body.mobi_side_open #open_slide .slide-toggle-chevron--collapse,
-#open_slide.is-sidebar-open .slide-toggle-chevron--collapse {display: block !important;}
+#open_slide[aria-expanded="true"] .slide-toggle-chevron--expand {display: none !important;}
+#open_slide[aria-expanded="true"] .slide-toggle-chevron--collapse {display: block !important;}
 nav.navbar-findcond ul.navbar-nav a {color: #3e3e3e;font-size: 16px;padding: 16px 15px;border: 0;box-shadow:none;transition: all .15s ease-in-out;border-radius: 0; }
 nav.navbar-findcond ul.right-part .open > a, nav.navbar-findcond ul.right-part a:hover, nav.navbar-findcond ul.right-part a:visited, nav.navbar-findcond ul.right-part a:focus, nav.navbar-findcond ul.right-part a:active { background: transparent; }
 nav.navbar-findcond ul.navbar-nav.navbar-right li.open>a { background: rgba(0, 0, 0, 0.05);border:0; }
@@ -4091,9 +4089,9 @@ nav.navbar-findcond .pull-right>.navbar-nav>li>a {padding: 17px 11px !important;
 @media (max-width: 620px){
 .home-page-categories .videos .video-list img {min-height: 150px;max-height: 150px;}
 .profile-container .links-container ul{	white-space: nowrap;overflow-x: auto;padding-bottom: 8px;}
-nav.navbar-findcond .yp_slide_menu span {margin: 10px 5px 10px 10px;}
+nav.navbar-findcond .yp_slide_menu .slide-toggle-btn {margin: 10px 5px 10px 10px;}
 nav.navbar-findcond .pull-right>.navbar-nav>li>a {padding: 17px 10px !important;}
-nav.navbar-findcond .yp_slide_menu span {margin: 10px 0px;}
+nav.navbar-findcond .yp_slide_menu .slide-toggle-btn {margin: 10px 0px;}
 nav.navbar-findcond .logo-img {margin: 8px 15px !important;}
 .pt_import_vdo #fetch-form {padding: 50px 10px;}
 .play-lists div.video-latest-list {padding: 0 0 10px;}
@@ -4269,7 +4267,7 @@ nav.navbar-findcond .pull-right>.navbar-nav>li>a {padding: 17px 6px !important;}
 
 @media (max-width: 380px){
 header nav .container-fluid {padding: 0;}
-nav.navbar-findcond .yp_slide_menu span {margin: 10px 4px;}
+nav.navbar-findcond .yp_slide_menu .slide-toggle-btn {margin: 10px 4px;}
 nav.navbar-findcond .logo-img {max-width: 95px;margin: 13px 3px !important;}
 .user-ads-list-container .user-ads-list-header span.create-ad-btn a, .create-new-ad-container .user-ads-list-header span.create-ad-btn a {font-size:0px;}
 nav.navbar-findcond .profile-nav.open > .dropdown-menu.ani-acc-menu, nav.navbar-findcond .profile-nav.open > .dropdown-menu.ani_log_menu {right: 0px !important;}
