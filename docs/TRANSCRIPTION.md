@@ -55,16 +55,16 @@ Descriptions are **not** rewritten automatically after transcription any more (s
 
 ## Watch page layout
 
-Below the player:
+The YouPlay theme uses a compact layout below the player:
 
-1. Minimal top CTA strip (off-white, green accent)  
-2. **Key Takeaways** (white card with checkmarks; hidden if empty or invalid JSON)  
-3. **About This Video** (typography-led section, no green box)  
-4. **Transcript** (full-width “Show Full Transcript” toggle)  
-5. Secondary CTA (clean card after transcript)  
-6. Comments (unchanged)
+1. Title, metadata, creator and video actions. Embed, download and other secondary actions remain available under **More video actions**, with the same permission checks.
+2. **Overview** and **Transcript** tabs, when a transcript exists. The overview shows three takeaways initially; **View all** reveals every remaining takeaway. **About this video** expands to the summary or existing description.
+3. The **primary CTA** follows the selected information panel. Comments expand below it.
+4. Related videos occupy the desktop sidebar or follow comments on mobile. The **secondary CTA** follows related videos. Playlist pages retain their existing playlist column.
 
-Edit copy in **Admin → Tools → Transcribe Videos** under “Watch page — top CTA strip” and “Watch page — secondary CTA”.
+Edit the two offers independently in **Admin → Tools → Transcribe Videos**, under “Watch page — primary CTA” and “Watch page — secondary CTA”. All existing `watch_cta_*` / `watch_cta2_*` values and HTML overrides remain in use. An empty secondary URL still falls back to the primary URL. The secondary HTML is moved between responsive slots, never cloned, so custom IDs and form state remain intact. No settings migration is needed.
+
+The YouPlay summary no longer appends an additional generic clinic pitch; the two configured CTAs provide those calls to action. Stored descriptions and other themes are unchanged. Without the enhancement script, both CTAs and the full transcript remain available in the main column.
 
 Captions: WebVTT at `/vtt/{public_video_id}`.
 
