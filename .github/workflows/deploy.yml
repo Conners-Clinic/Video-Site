@@ -1,51 +1,89 @@
-name: Deploy PlayTube Test Site
+name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - super
+    # Skip pushes whose every changed file is a Continuity file: checkpoint
+    # records, or a tooling update from continuity-manager (.continuity/ plus
+    # its three skills). Any push that also changes anything else deploys.
+    paths-ignore:
+      - '.continuity/**'
+      - '.agents/skills/handoff/**'
+      - '.agents/skills/pickup/**'
+      - '.agents/skills/continuity-onboard/**'
+      - '.claude/skills/handoff'
+      - '.claude/skills/pickup'
+      - '.claude/skills/continuity-onboard'
+      - '.claude/skills/handoff/**'
+      - '.claude/skills/pickup/**'
+      - '.claude/skills/continuity-onboard/**'
   workflow_dispatch:
 
-permissions: {}
-
 concurrency:
-  group: playtube-test-deploy
-  cancel-in-progress: false
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  deploy-test:
+    name: Deploy to test-videos
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
     steps:
-      - name: Deploy to test-videos.connersclinic.com
-        shell: bash
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_KEY: ${{ secrets.SERVER_KEY }}
-        run: |
-          umask 077
-          key="$(mktemp)"
-          trap 'rm -f "$key"' EXIT
-          printf '%s\n' "$SERVER_KEY" | tr -d '\r' > "$key"
+      - name: Deploy via SSH Password
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /home/admin/web/test-videos.connersclinic.com/public_html/
+            git fetch origin
+            git reset --hard origin/main
 
-          ssh -T -i "$key" -p "$SERVER_PORT" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o ConnectTimeout=15 \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -l "$SERVER_USER" "$SERVER_HOST" 'bash -se' <<'REMOTE'
-          cd /home/clients/67b433575a2b4e8ed916166f746d19d6/sites/test-videos.connersclinic.com
+  deploy-production:
+    name: Deploy to production
+    if: github.ref == 'refs/heads/super'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fast-forward production via SSH
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            set -eu
+            cd '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            export GIT_TERMINAL_PROMPT=0
 
-          if [ "$(git branch --show-current)" != main ]; then
-            echo "Deployment stopped. The server checkout is not on main." >&2
-            exit 1
-          fi
+            for operation in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+              if [ -e "$(git rev-parse --git-path "$operation")" ]; then
+                echo "Deploy stopped: an unfinished Git operation is present ($operation)." >&2
+                exit 1
+              fi
+            done
 
-          export GIT_TERMINAL_PROMPT=0
-          git fetch origin main && git reset --hard origin/main || exit 1
-          echo "Deployed $(git log -1 --oneline)"
-          REMOTE
+            branch=$(git symbolic-ref --quiet --short HEAD || true)
+            if [ "$branch" != super ]; then
+              echo "Deploy stopped: the server checkout must be on super." >&2
+              exit 1
+            fi
+
+            if [ -n "$(git --no-optional-locks status --porcelain --untracked-files=no)" ]; then
+              echo "Deploy stopped: the server checkout has uncommitted tracked changes." >&2
+              exit 1
+            fi
+
+            git pull --ff-only origin super
+            deployed=$(git rev-parse HEAD)
+            fetched=$(git rev-parse FETCH_HEAD)
+            if [ "$deployed" != "$fetched" ]; then
+              echo "Deploy stopped: the server checkout is ahead of origin/super." >&2
+              exit 1
+            fi
+            printf 'Deployed super at %s\n' "$deployed"

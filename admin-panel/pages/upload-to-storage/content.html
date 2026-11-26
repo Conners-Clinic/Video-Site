@@ -11,6 +11,8 @@ if (!in_array($_GET['storage'], $storages)) {
     exit();
 }
 
+$storageName = $_GET['storage'] === 'digitalocean' ? 'Cloudflare R2' : ucfirst($_GET['storage']);
+
 $files = filterFiles(getDirContents('upload'), $_GET["storage"]);
 
 if ($_GET['storage'] == 'amazon') {
@@ -33,20 +35,20 @@ if ($_GET['storage'] == 'backblaze') {
 
 if ($_GET['storage'] == 'digitalocean') {
     if ($pt->config->spaces == "off") {
-        $error = "digitalocean is disabled or not configured, please configure it first.";
+        $error = "Cloudflare R2 is disabled or not configured, please configure it first.";
     }
 }
 ?>
 <div class="container-fluid">
     <div>
-        <h3>Upload Files To <?php echo ucfirst($_GET["storage"]); ?></h3>
+        <h3>Upload Files To <?php echo $storageName; ?></h3>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item">
                     <a href="#">Admin Panel</a>
                 </li>
                 <li class="breadcrumb-item">
-                    <a href="#">Upload To <?php echo ucfirst($_GET["storage"]); ?></a>
+                    <a href="#">Upload To <?php echo $storageName; ?></a>
                 </li>
             </ol>
         </nav>
@@ -56,7 +58,7 @@ if ($_GET['storage'] == 'digitalocean') {
         <div class="col-lg-12 col-md-12">
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-title">Upload Files To <?php echo ucfirst($_GET["storage"]); ?></h6>
+                    <h6 class="card-title">Upload Files To <?php echo $storageName; ?></h6>
                     
                     <?php if (empty($error)) { ?>
                      <div class="alert alert-warning">This feature is used to upload files from server to cloud only if you have videos and images on the server and moved to cloud storage, <strong>ignore this step if you are using a fresh installation.</strong></div>
@@ -69,7 +71,7 @@ if ($_GET['storage'] == 'digitalocean') {
                     <div class="email-settings-alert"></div>
                     <?php if (empty($error)) { ?>
                     <div class="wo_install_wiz">
-                        <ul class="wo_update_changelog"><?php if (count($files) > 0) { ?>Click Start to upload files from server to <?php echo ucfirst($_GET["storage"]); ?><?php } else { ?>No files found to upload<?php }?>.</ul>
+                        <ul class="wo_update_changelog"><?php if (count($files) > 0) { ?>Click Start to upload files from server to <?php echo $storageName; ?><?php } else { ?>No files found to upload<?php }?>.</ul>
                     </div>
                     <div class="clearfix"></div>
                         <?php if (count($files) > 0) { ?>
@@ -115,7 +117,7 @@ var count = 0;
 function startUpload(file) {
     count = count + 1;
     if (count > totalFiles) {
-        $('.wo_update_changelog').append('<li><span class="added">FINISIHED</span> ~$ Upload successfull, more than (<?php echo count($files);?>) file(s) were uploaded to <?php echo ucfirst($_GET["storage"]); ?></li>');
+        $('.wo_update_changelog').append('<li><span class="added">FINISIHED</span> ~$ Upload successfull, more than (<?php echo count($files);?>) file(s) were uploaded to <?php echo $storageName; ?></li>');
         $('#button-update').hide();
         return false;
     }
@@ -140,7 +142,7 @@ $(document).on('click', '#button-update', function(event) {
         background: '#1e2321',
         color: '#fff'
     });
-    $('.wo_update_changelog').append('<li><span class="fixed">COMMAND</span> ~$ Connecting to <?php echo ucfirst($_GET["storage"]); ?>..</li>');
+    $('.wo_update_changelog').append('<li><span class="fixed">COMMAND</span> ~$ Connecting to <?php echo $storageName; ?>..</li>');
     $(this).attr('disabled', true);
     $.get('{{LINK aj/ap/<?php echo $stroageAjax[$_GET['storage']]?>}}', function (data) {
         if (data.status == 200) {
@@ -159,7 +161,7 @@ $(document).on('click', '#button-update', function(event) {
             $('.wo_update_changelog').append('<li><span class="changed">FAILED</span> ~$ Error! '+data.message+'.</li>');
             $(this).attr('disabled', false);
         } else  {
-            $('.wo_update_changelog').append('<li><span class="changed">FAILED</span> ~$ Error found, please check your <?php echo ucfirst($_GET["storage"]); ?> settings.</li>');
+            $('.wo_update_changelog').append('<li><span class="changed">FAILED</span> ~$ Error found, please check your <?php echo $storageName; ?> settings.</li>');
             $(this).attr('disabled', false);
         }
     });
