@@ -49,14 +49,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Deploy via SSH Password
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Fast-forward production via SSH
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            cd /home/admin/web/videos.connersclinic.com/public_html/
-            git fetch origin
-            git checkout -B super origin/super
+            set -eu
+            cd '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            export GIT_TERMINAL_PROMPT=0
+
+            for operation in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+              if [ -e "$(git rev-parse --git-path "$operation")" ]; then
+                echo "Deploy stopped: an unfinished Git operation is present ($operation)." >&2
+                exit 1
+              fi
+            done
+
+            branch=$(git symbolic-ref --quiet --short HEAD || true)
+            if [ "$branch" != super ]; then
+              echo "Deploy stopped: the server checkout must be on super." >&2
+              exit 1
+            fi
+
+            if [ -n "$(git --no-optional-locks status --porcelain --untracked-files=no)" ]; then
+              echo "Deploy stopped: the server checkout has uncommitted tracked changes." >&2
+              exit 1
+            fi
+
+            git pull --ff-only origin super
+            deployed=$(git rev-parse HEAD)
+            fetched=$(git rev-parse FETCH_HEAD)
+            if [ "$deployed" != "$fetched" ]; then
+              echo "Deploy stopped: the server checkout is ahead of origin/super." >&2
+              exit 1
+            fi
+            printf 'Deployed super at %s\n' "$deployed"
