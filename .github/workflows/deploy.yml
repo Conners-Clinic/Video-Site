@@ -19,12 +19,12 @@ jobs:
 
     steps:
       - name: Deploy to test-videos.connersclinic.com
+        shell: bash
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_KEY: ${{ secrets.SERVER_KEY }}
-        shell: bash
         run: |
           umask 077
           key="$(mktemp)"
@@ -41,13 +41,10 @@ jobs:
           cd /home/clients/67b433575a2b4e8ed916166f746d19d6/sites/test-videos.connersclinic.com
 
           if [ "$(git branch --show-current)" != main ]; then
-            echo "Deploy stopped. The server checkout is not on main." >&2
+            echo "Deployment stopped. The server checkout is not on main." >&2
             exit 1
           fi
 
-          export GIT_TERMINAL_PROMPT=0
-          export GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'
-          git pull --ff-only origin main
-
+          GIT_TERMINAL_PROMPT=0 git pull --ff-only https://github.com/Conners-Clinic/Video-Site.git main
           echo "Deployed $(git log -1 --oneline)"
           REMOTE
