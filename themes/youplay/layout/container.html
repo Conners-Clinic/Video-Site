@@ -29,7 +29,7 @@
       <link rel="stylesheet" href="{{CONFIG theme_url}}/css/bootstrap.min.css?version={{CONFIG version}}">
       <link rel="stylesheet" href="{{CONFIG theme_url}}/js/lib/sweetalert2/dist/sweetalert2.min.css?version={{CONFIG version}}">
       <link rel="stylesheet" href="{{CONFIG theme_url}}/js/lib/notifIt/notifIt/css/notifIt.min.css?version={{CONFIG version}}">
-      <link rel="stylesheet" href="{{CONFIG theme_url}}/css/style.css?version={{CONFIG version}}&v=17" id="style-css">
+      <link rel="stylesheet" href="{{CONFIG theme_url}}/css/style.css?version={{CONFIG version}}&v=18" id="style-css">
       <link rel="stylesheet" href="{{CONFIG theme_url}}/css/custom.style.css?version={{CONFIG version}}">
       <?php /* Preload for soft nav, but only apply it on non-movie watch pages. */ ?>
       <link rel="stylesheet" href="{{CONFIG theme_url}}/css/watch-content.css?version={{CONFIG version}}&v=21" id="watch-content-css" media="<?php echo ($pt->page == 'watch' && empty($pt->is_movie)) ? 'all' : 'not all'; ?>">
@@ -38,6 +38,9 @@
       <?php endif; ?>
       <link href="{{CONFIG theme_url}}/css/material.css?version={{CONFIG version}}" rel="stylesheet" type="text/css">
       <link href="{{CONFIG theme_url}}/css/roboto.css?version={{CONFIG version}}" rel="stylesheet">
+      <link rel="stylesheet" href="{{CONFIG theme_url}}/css/library.css?version={{CONFIG version}}&v=2">
+      <script defer src="{{CONFIG theme_url}}/js/library.js?version={{CONFIG version}}&v=1"></script>
+      <script defer src="{{CONFIG theme_url}}/js/sidebar.js?version={{CONFIG version}}&v=1"></script>
       <script src="{{CONFIG theme_url}}/js/jquery-3.min.js?version={{CONFIG version}}&amp;securityrev=20261111"></script>
       <script src="{{CONFIG theme_url}}/js/jquery-ui.min.js?version={{CONFIG version}}&amp;securityrev=20261111"></script>
       <script type="text/javascript" src="{{CONFIG theme_url}}/js/jquery.form.min.js?version={{CONFIG version}}"></script>
@@ -442,15 +445,16 @@
       </div>
       <?php if ($pt->phone_api != 'yes' && ($pt->config->maintenance_mode != "on" || PT_IsAdmin())): ?>
       <?php if ($pt->page != 'login') { ?>
-      <div class="yp_side_drawer">
+      <div class="yp_side_drawer" id="site-sidebar">
          <span class="open_side_menu_head">
-            <span onclick="javascript:$('body').removeClass('side_open');$('body').removeClass('mobi_side_open');if(typeof ptSyncSidebarToggleIcon==='function'){ptSyncSidebarToggleIcon();}">
+            <button type="button" class="sidebar-close" data-sidebar-close aria-label="Close menu">
                <svg height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                   <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
                </svg>
-            </span>
+            </button>
          </span>
          <ul class="sections">
+            <?php echo PT_LoadPage('header/upload-link'); ?>
             <li class="<?php echo ($pt->page == 'home') ? 'active': '';?>" id="home_menu_">
                <a href="{{LINK }}" data-load="?link1=home">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -762,7 +766,7 @@
       </div>
       <?php } ?>
       <?php if ($pt->page != 'login') { ?>
-      <div class="sidenav-overlay" onclick="javascript:$('body').removeClass('side_open');$('body').removeClass('mobi_side_open');if(typeof ptSyncSidebarToggleIcon==='function'){ptSyncSidebarToggleIcon();}"></div>
+      <div class="sidenav-overlay" data-sidebar-close></div>
       <?php } ?>
       <div class="fab-overlay"></div>
       <script>
@@ -805,14 +809,12 @@
            document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
          }
          function SlideSetCookie(cname, cvalue, exdays) {
-         $('#open_slide').attr('onclick', "SlideEraseCookie('open_slide')");
            var d = new Date();
            d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
            var expires = "expires="+d.toUTCString();
            document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
          }
          function SlideEraseCookie(name) {
-         $('#open_slide').attr('onclick', "SlideSetCookie('open_slide','yes',1)");
            document.cookie = name + '=;path=/;Max-Age=0'
          }
 

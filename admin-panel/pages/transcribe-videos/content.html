@@ -130,8 +130,8 @@
                             ?></textarea>
                         </div>
                         <hr>
-                        <h6>Watch page — top CTA strip</h6>
-                        <p class="text-muted">Slim strip below title/metadata on every watch page. Leave HTML override empty to use the fields below.</p>
+                        <h6>Watch page — primary CTA</h6>
+                        <p class="text-muted">In YouPlay, shown after the selected Overview or Transcript content. Other themes show it below the title. Leave HTML override empty to use the fields below.</p>
                         <?php $watch_cta_defaults = PT_GetWatchCtaDefaults(); ?>
                         <div class="form-group">
                             <label>Eyebrow</label>
@@ -155,13 +155,13 @@
                             <input type="url" class="form-control" name="watch_cta_button_url" value="<?php echo htmlspecialchars($pt->config->watch_cta_button_url ?? $watch_cta_defaults['button_url']); ?>">
                         </div>
                         <div class="form-group">
-                            <label>Top strip HTML override (optional)</label>
+                            <label>Primary CTA HTML override (optional)</label>
                             <small class="text-muted d-block m-b-5">Must be HTML (include &lt;a&gt; tags for buttons). Plain text is ignored and the fields above are used instead.</small>
                             <textarea class="form-control" name="watch_page_cta_html" rows="4"><?php echo htmlspecialchars($pt->config->watch_page_cta_html ?? ''); ?></textarea>
                         </div>
                         <hr>
                         <h6>Watch page — secondary CTA</h6>
-                        <p class="text-muted">Shown after the transcript, before comments.</p>
+                        <p class="text-muted">In YouPlay, shown after related videos: in the sidebar on desktop and lower on mobile. Other themes show it after the transcript.</p>
                         <?php $watch_cta2_defaults = PT_GetWatchSecondaryCtaDefaults(); ?>
                         <div class="form-group">
                             <label>Eyebrow</label>
@@ -181,7 +181,7 @@
                             <input type="text" class="form-control" name="watch_cta2_button_text" value="<?php echo htmlspecialchars($pt->config->watch_cta2_button_text ?? $watch_cta2_defaults['button_text']); ?>">
                         </div>
                         <div class="form-group">
-                            <label>Button URL (optional — uses top CTA URL if empty)</label>
+                            <label>Button URL (optional — uses primary CTA URL if empty)</label>
                             <input type="url" class="form-control" name="watch_cta2_button_url" value="<?php echo htmlspecialchars($pt->config->watch_cta2_button_url ?? ''); ?>">
                         </div>
                         <div class="form-group">
