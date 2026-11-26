@@ -8,7 +8,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: playtube-test
+  group: playtube-test-deploy
   cancel-in-progress: false
 
 jobs:
@@ -21,9 +21,10 @@ jobs:
       - name: Deploy to test-videos.connersclinic.com
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_KEY: ${{ secrets.SERVER_KEY }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_KEY: ${{ secrets.SERVER_KEY }}
+        shell: bash
         run: |
           umask 077
           key="$(mktemp)"
@@ -31,16 +32,22 @@ jobs:
           printf '%s\n' "$SERVER_KEY" | tr -d '\r' > "$key"
 
           ssh -T -i "$key" -p "$SERVER_PORT" \
-            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
-            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
             -l "$SERVER_USER" "$SERVER_HOST" 'bash -se' <<'REMOTE'
           cd /home/clients/67b433575a2b4e8ed916166f746d19d6/sites/test-videos.connersclinic.com
 
           if [ "$(git branch --show-current)" != main ]; then
-            echo "Deployment stopped. The server checkout is not on main."
+            echo "Deploy stopped. The server checkout is not on main." >&2
             exit 1
           fi
 
-          GIT_TERMINAL_PROMPT=0 git pull --ff-only origin main
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'
+          git pull --ff-only origin main
+
           echo "Deployed $(git log -1 --oneline)"
           REMOTE
