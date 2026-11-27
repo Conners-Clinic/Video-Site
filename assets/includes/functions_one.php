@@ -478,7 +478,7 @@ function PT_GetMedia($media = '', $is_upload = false){
         return $media;
     }
 
-    $media_url     = $pt->config->site_url . '/' . $media;
+    $media_url     = $pt->config->site_url . '/' . $media . "?a";
     if ($pt->config->s3_upload == 'on' && $is_upload == false) {
         $media_url = "https://" . $pt->config->s3_bucket_name . ".s3.amazonaws.com/" . $media;
         if (!empty($pt->config->amazon_endpoint) && filter_var($pt->config->amazon_endpoint, FILTER_VALIDATE_URL)) {
