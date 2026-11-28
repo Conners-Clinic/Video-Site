@@ -8,6 +8,7 @@
 // | PlayTube - The Ultimate Video Sharing Platform
 // | Copyright (c) 2017 PlayTube. All rights reserved.
 // +------------------------------------------------------------------------+
+require_once __DIR__ . '/traffic_reads.php';
 require_once('app_start.php');
 use Aws\S3\S3Client;
 use Google\Cloud\Storage\StorageClient;
@@ -3127,27 +3128,13 @@ function CheckHaveMultiPermission($pages=array())
 }
 function GetIso()
 {
-    global $pt,$db;
-    $iso = array();
-    foreach ($pt->langs as $key => $value) {
-        $info = $db->where('lang_name',$value)->getOne(T_LANG_ISO);
-        if (!empty($info) && !empty($info->iso)) {
-            $iso[$value] = $info->iso;
-        }
-    }
-    return $iso;
+    global $pt, $db;
+    return PT_TrafficLanguageMap($db, $pt->langs, 'iso');
 }
 function LangsStatus()
 {
-    global $pt,$db;
-    $iso = array();
-    foreach ($pt->langs as $key => $value) {
-        $info = $db->where('lang_name',$value)->getOne(T_LANG_ISO);
-        if (!empty($info) && isset($info->status)) {
-            $iso[$value] = $info->status;
-        }
-    }
-    return $iso;
+    global $pt, $db;
+    return PT_TrafficLanguageMap($db, $pt->langs, 'status');
 }
 function BackblazeConnect($args=[])
 {

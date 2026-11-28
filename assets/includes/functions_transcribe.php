@@ -84,11 +84,11 @@ function PT_GetVideoTranscript($video_id) {
     return $db->arraybuilder()->where('video_id', $video_id)->getOne(T_VIDEO_TRANSCRIPTS);
 }
 
-function PT_GetTranscriptVttUrl($video) {
+function PT_GetTranscriptVttUrl($video, $transcript_row = null) {
     if (empty($video->video_id)) {
         return '';
     }
-    $row = PT_GetVideoTranscript($video->id);
+    $row = func_num_args() > 1 ? $transcript_row : PT_GetVideoTranscript($video->id);
     if (empty($row) || PT_DbVal($row, 'status') !== 'completed' || empty(PT_DbVal($row, 'vtt_path'))) {
         return '';
     }
@@ -107,7 +107,7 @@ function PT_AttachTranscriptToVideo($video) {
         $video->key_takeaways = PT_ParseKeyTakeaways(PT_DbVal($row, 'key_takeaways', ''));
         $video->has_completed_transcript = true;
         if (!empty(PT_DbVal($row, 'vtt_path'))) {
-            $video->transcript_vtt_url = PT_GetTranscriptVttUrl($video);
+            $video->transcript_vtt_url = PT_GetTranscriptVttUrl($video, $row);
             $video->transcript_language = !empty(PT_DbVal($row, 'language')) ? PT_DbVal($row, 'language') : 'en';
         }
     }
