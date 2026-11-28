@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/traffic-rebase-evidence.yml'
       - 'tools/traffic-rebase-evidence.php'
+      - 'tools/traffic-recovery-rehearsal.php'
   workflow_dispatch:
 
 permissions:
@@ -63,3 +64,4 @@ jobs:
             printf 'Candidate revision: %s\n' "$target"
             php -l tools/traffic-rebase-evidence.php >/dev/null
             php tools/traffic-rebase-evidence.php --site-root="$production" --private-base="$private_base"
+            php tools/traffic-recovery-rehearsal.php --site-root="$production" --private-base="$private_base" --target="$target"

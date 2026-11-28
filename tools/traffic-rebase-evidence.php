@@ -31,7 +31,8 @@ function trafficRebaseEvidence($root, $private) {
         $stages[$match[4]][(int) $match[3]] = array('mode' => $match[1], 'sha' => $match[2]);
         if (!isset($known[$match[4]][$match[1] . ':' . $match[2]])) { $unknownIndex++; }
     }
-    $matches = 0; $conflictMatches = 0; $unknownWorking = 0; $unknownKinds = array();
+    $matches = 0; $conflictMatches = 0; $unknownWorking = 0; $unknownKinds = array(); $preservable = array();
+    $helperPaths = array('.claude/skills/continuity-onboard', '.claude/skills/handoff', '.claude/skills/pickup');
     foreach ($stages as $path => $entries) {
         $file = $root . '/' . $path;
         $mode = is_link($file) ? '120000' : ((fileperms($file) & 0111) ? '100755' : '100644');
@@ -40,6 +41,9 @@ function trafficRebaseEvidence($root, $private) {
             $unknownWorking++;
             $kind = is_dir($file) ? 'directory_at_tracked_file' : 'missing_tracked_file';
             $unknownKinds[$kind] = ($unknownKinds[$kind] ?? 0) + 1;
+            if (is_dir($file) && !is_link($file) && in_array($path, $helperPaths, true)
+                && strpos(realpath($file) . '/', $root . '/') === 0
+                && in_array('120000', array_column($entries, 'mode'), true)) { $preservable[] = $path; }
             continue;
         }
         $sha = sha1('blob ' . strlen($bytes) . "\0" . $bytes);
@@ -65,7 +69,8 @@ function trafficRebaseEvidence($root, $private) {
     }
     return array('known_rebase_matches' => true, 'tracked_files' => count($stages), 'public_working_file_matches' => $matches,
         'reproduced_conflict_files' => $conflictMatches, 'unknown_index_entries' => $unknownIndex,
-        'unknown_working_files' => $unknownWorking, 'unknown_kinds' => $unknownKinds, 'safe_to_recover_known_rebase' => $unknownIndex === 0 && $unknownWorking === 0);
+        'unknown_working_files' => $unknownWorking, 'unknown_kinds' => $unknownKinds, 'preservable_helper_directories' => count($preservable),
+        'safe_to_recover_known_rebase' => $unknownIndex === 0 && $unknownWorking === count($preservable));
 }
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     try {

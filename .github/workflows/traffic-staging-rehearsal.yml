@@ -62,4 +62,4 @@ jobs:
             cd "$candidate"
             printf 'Candidate revision: %s\n' "$target"
             php -l tools/traffic-staging-rehearsal.php >/dev/null
-            php tools/traffic-staging-rehearsal.php --site-root="$staging" --private-base="$private_base" --target="$target" --browser-window=600
+            php tools/traffic-staging-rehearsal.php --site-root="$staging" --private-base="$private_base" --target="$target" --browser-window=0

@@ -78,6 +78,12 @@ function rehearsalJourney($site, $watch, $directory, $key, $candidate) {
     if ($candidate && (strpos($home['body'], '/assets/js/search-suggestions.js') === false || strpos($home['body'], '/assets/js/background-poll.js') === false)) {
         throw new RuntimeException('Candidate assets missing from served HTML');
     }
+    if ($candidate) {
+        foreach (array('search-suggestions', 'background-poll', 'playlist-navigation') as $asset) {
+            $script = rehearsalHttp($site . '/assets/js/' . $asset . '.js', $cookie, $key);
+            if (strpos($script['body'], 'function') === false) { throw new RuntimeException('JavaScript asset not served'); }
+        }
+    }
     $routes = array('home' => $site . '/', 'search' => $site . '/search?keyword=Rife', 'watch' => $watch);
     $result = array();
     foreach ($routes as $name => $url) {
@@ -189,7 +195,9 @@ try {
         $stash = rehearsalGit($root, array('rev-parse', 'refs/stash'), $log);
         file_put_contents($journal . '/stash-ref', $stash);
     }
+    umask(0022); // Public tracked assets must be readable by the web server.
     rehearsalGit($root, array('switch', '--quiet', '--detach', $target), $log); $switched = true;
+    umask(0077);
     $mergedBytes = file_get_contents($merged);
     if (strpos(file_get_contents($candidate . '/assets/includes/functions_one.php'), "\r\n") !== false) { $mergedBytes = str_replace("\n", "\r\n", $mergedBytes); }
     rehearsalWrite($root . '/assets/includes/functions_one.php', $mergedBytes);
@@ -223,8 +231,10 @@ try {
             // Only the known, privately preserved media overlay may be dirty here.
             $dirty = rehearsalGit($root, array('status', '--porcelain', '--untracked-files=no'), $log);
             if ($dirty !== '' && $dirty !== 'M assets/includes/functions_one.php') { throw new RuntimeException('Unexpected concurrent edit; automatic rollback stopped'); }
+            umask(0022);
             rehearsalGit($root, array('restore', '--source=HEAD', '--worktree', '--', 'assets/includes/functions_one.php'), $log);
             rehearsalGit($root, array('switch', '--quiet', 'main'), $log);
+            umask(0077);
         }
         if ($stash !== null) { rehearsalGit($root, array('stash', 'apply', '--quiet', '--index', $stash), $log); }
         if ($originalFunction !== null && $originalStartup !== null) {
