@@ -53,6 +53,7 @@ function cardFixture($id) {
 }
 function renderCard($video, $template) {
     global $pt;
+    $pt->card_image_count = 0;
     $pt->q = $video; $pt->video = $video;
     return PT_LoadPage($template, array('ID' => $video->id, 'TITLE' => $video->title, 'URL' => $video->url, 'ajax_url' => $video->ajax_url,
         'THUMBNAIL' => $video->thumbnail, 'GIF' => $video->gif, 'USER_DATA' => $video->owner, 'TIME' => $video->time_ago, 'VIEWS' => $video->views,

@@ -6,7 +6,7 @@
 				<div class="wow_liv_counter"><span>{{LANG live}}</span></div>
 			<?php } ?>
 			<a href="{{URL}}" data-load="{{ajax_url}}">
-				<img src="{{THUMBNAIL}}" alt="{{TITLE}}">
+				<img loading="<?php echo PT_CardImageLoading(); ?>" decoding="async" width="640" height="360" src="{{THUMBNAIL}}" alt="{{TITLE}}">
 			</a>
 		</div>
 		<div class="center_abs">

@@ -95,6 +95,7 @@
       <link rel="stylesheet" href="{{CONFIG theme_url}}/css/swiper-bundle.min.css?version={{CONFIG version}}" />
       <script src="{{CONFIG theme_url}}/js/swiper-bundle.min.js?version={{CONFIG version}}"></script>
       <script src="{{CONFIG theme_url}}/js/plupload.full.min.js?version={{CONFIG version}}"></script>
+      <script src="{{CONFIG site_url}}/assets/js/background-poll.js?v=20261128"></script>
       <script>
          function RunLiveAgora(channelName,DIV_ID,token) {
            var agoraAppId = '<?php echo($pt->config->agora_app_id) ?>';
@@ -134,28 +135,28 @@
          }
            <?php if (IS_LOGGED == true && $pt->config->server == 'nodejs') {?>
               const socket = io('{{CONFIG hostname}}:{{CONFIG server_port}}');
-              var notificationsTimer = null;
-              socket.on('connect_error', function (error) {
-                 console.log(error);
+              var socketPollDone = null, socketPollTimeout = null;
+              var socketNotificationPoll = PTBackgroundPoll.create({
+                  hidden: function () { return document.hidden; },
+                  setTimer: window.setTimeout.bind(window), clearTimer: window.clearTimeout.bind(window),
+                  request: function (args, done) {
+                      if (!socket.connected) { done(false); return; }
+                      socketPollDone = done;
+                      socketPollTimeout = setTimeout(function () {
+                          if (socketPollDone) { var finish = socketPollDone; socketPollDone = null; finish(false); }
+                      }, 15000);
+                      socket.emit('get notifications and messages');
+                  }
               });
-              setTimeout(function () {
-                getNotifications();
-              }, 1500);
-              document.addEventListener('visibilitychange', function () {
-                scheduleNotifications();
+              socket.on('connect', function () { socketNotificationPoll.refresh(); });
+              socket.on('disconnect', function () {
+                  clearTimeout(socketPollTimeout);
+                  if (socketPollDone) { var finish = socketPollDone; socketPollDone = null; finish(false); }
               });
-              function scheduleNotifications() {
-                  clearTimeout(notificationsTimer);
-                  var interval = document.hidden ? 10000 : 2000;
-                  notificationsTimer = setTimeout(function () {
-                    getNotifications();
-                  }, interval);
-              }
-              function getNotifications() {
-                  socket.emit('get notifications and messages');
-                  scheduleNotifications();
-              }
+              document.addEventListener('visibilitychange', socketNotificationPoll.visibility);
               socket.on('get notifications results', function (data) {
+                 clearTimeout(socketPollTimeout);
+                 if (socketPollDone) { var finish = socketPollDone; socketPollDone = null; finish(data.status == 200); }
                  if (data.status == 200) {
                     if (data.messages > 0) {
                        var default_messages = $('body').attr('data-messages');

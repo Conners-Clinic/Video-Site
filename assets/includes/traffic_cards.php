@@ -67,3 +67,9 @@ function PT_VideoCards($rows, $database = null) {
     }
     return $cards;
 }
+
+function PT_CardImageLoading() {
+    global $pt;
+    $pt->card_image_count = (int) ($pt->card_image_count ?? 0) + 1;
+    return $pt->card_image_count <= 2 ? 'eager' : 'lazy';
+}
