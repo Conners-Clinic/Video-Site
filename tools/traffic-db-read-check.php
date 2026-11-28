@@ -21,7 +21,7 @@ function trafficComparison($before, $after) {
         'before_elapsed_ms' => $before['elapsed_ms'], 'after_elapsed_ms' => $after['elapsed_ms'],
         'before_sql_ms' => $before['sql_ms'], 'after_sql_ms' => $after['sql_ms']);
 }
-function PT_Link($path) { return '/traffic-fixture/' . $path; }
+
 
 try {
     $options = getopt('', array('site-root:'));
@@ -41,6 +41,14 @@ try {
     require $repo . '/assets/libs/DB/vendor/autoload.php';
     require $repo . '/assets/includes/traffic_reads.php';
     require $repo . '/assets/includes/functions_transcribe.php';
+    require $repo . '/assets/includes/richtext_security.php';
+    require $repo . '/assets/includes/functions_general.php';
+    require $repo . '/assets/includes/traffic_search.php';
+    require $repo . '/assets/includes/traffic_cards.php';
+    require $repo . '/tests/traffic-function-loader.php';
+    trafficLoadFunctions($repo . '/assets/includes/functions_one.php', array('PT_GetVideoByID', 'PT_UserData', 'PT_GetMedia', 'PT_IsAdmin', 'addhttp', 'TranslateDate'));
+    define('IS_LOGGED', false);
+    $site_url = $config['site_url'];
     $phase = 'database_connection';
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     $mysqli = mysqli_init(); $mysqli->options(MYSQLI_OPT_CONNECT_TIMEOUT, 5);
@@ -94,6 +102,7 @@ try {
         return array('categories' => $categories, 'sub_categories' => $sub_categories);
     });
     $after = trafficMeasure($db, static function () use ($db, $lang) { return PT_TrafficCategoryNavigation($db, $lang); });
+    $navigation = $after['value'];
     $report['categories'] = trafficComparison($before, $after);
     $report['category_count'] = count($before['value']['categories']);
     $phase = 'transcript_comparison';
@@ -110,9 +119,53 @@ try {
         });
         $report['transcript'] = trafficComparison($before, $after);
     } else { $report['transcript'] = array('skipped' => 'no_completed_caption_fixture'); }
+    $phase = 'card_context';
+    $display_config = array();
+    foreach ($db->get(T_CONFIG) as $setting) { $display_config[$setting->name] = $setting->value; }
+    $display_config['site_url'] = $site_url;
+    $pt = (object) array('config' => (object) $display_config, 'language' => $locale, 'language_type' => 'ltr', 'loggedin' => false, 'blocked_array' => array(0));
+    $categories = $navigation['categories'];
+    $countries_name = array();
+    $sample_videos = $db->where('privacy', 0)->where('approved', 1)->orderBy('id', 'DESC')->get(T_VIDEOS, 20);
+    $project = static function ($rows) {
+        $out = array();
+        foreach ($rows as $video) {
+            $item = array();
+            foreach (array('id', 'title', 'url', 'ajax_url', 'thumbnail', 'gif', 'list_description', 'time_ago', 'time_alpha', 'category_name', 'video_id_') as $field) { $item[$field] = $video->{$field}; }
+            foreach (array('name', 'name_v', 'avatar', 'url', 'username') as $field) { $item['owner_' . $field] = $video->owner->{$field} ?? null; }
+            $out[] = $item;
+        }
+        return $out;
+    };
+    $phase = 'card_comparison';
+    foreach (array(10, 20) as $size) {
+        $rows = array_slice($sample_videos, 0, $size);
+        $before = trafficMeasure($db, static function () use ($rows, $project) {
+            $out = array(); foreach ($rows as $row) { $out[] = PT_GetVideoByID(clone $row, 0, 0, 0); }
+            return $project($out);
+        });
+        $after = trafficMeasure($db, static function () use ($rows, $project) { return $project(PT_VideoCards($rows)); });
+        $report['guest_cards_' . $size] = trafficComparison($before, $after);
+        $report['guest_cards_' . $size]['cards'] = count($rows);
+    }
+    $phase = 'search_comparison';
+    foreach (array('Rife', 'PectaSol', 'IV', 'B12', '5-FU') as $term) {
+        $pattern = '%' . $term . '%';
+        $before = trafficMeasure($db, static function () use ($db, $pattern) {
+            $rows = $db->rawQuery("SELECT id FROM " . T_VIDEOS . " WHERE (title LIKE ? OR tags LIKE ? OR description LIKE ?) AND approved = 1 AND privacy = 0 ORDER BY CASE WHEN title LIKE ? THEN 1 WHEN description LIKE ? THEN 2 WHEN tags LIKE ? THEN 3 ELSE 4 END, id ASC LIMIT 20", array_fill(0, 6, $pattern));
+            return array_map(static function ($row) { return (int) $row->id; }, $rows);
+        });
+        $after = trafficMeasure($db, static function () use ($db, $term) {
+            return array_map(static function ($row) { return (int) $row->id; }, PT_SearchVideoRows($db, $term, array('limit' => 20)));
+        });
+        $report['search_fixtures'][$term] = trafficComparison($before, $after);
+        $report['search_fixtures'][$term]['returned_rows'] = count($after['value']);
+    }
     $mysqli->rollback();
     $pass = $report['languages']['same_result'] && $report['categories']['same_result']
         && (!isset($report['transcript']['same_result']) || $report['transcript']['same_result']);
+    foreach (array(10, 20) as $size) { $pass = $pass && $report['guest_cards_' . $size]['same_result']; }
+    foreach ($report['search_fixtures'] as $comparison) { $pass = $pass && $comparison['same_result']; }
     $report['status'] = $pass ? 'passed' : 'behavior_difference';
     echo 'TRAFFIC_READ_CHECK_JSON=' . json_encode($report, JSON_UNESCAPED_SLASHES) . "\n";
     exit($pass ? 0 : 2);

@@ -173,10 +173,10 @@
 var v_sortBy = null;
 var v_order = null;
 	function ChangePage() {
-		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.$_GET['keyword'] : '') ?>&page_id=1" + "&sortBy=" + v_sortBy + "&order=" + v_order);
+		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.rawurlencode($_GET['keyword']) : '') ?>&page_id=1" + "&sortBy=" + v_sortBy + "&order=" + v_order);
 	}
 	function GoToPage(page_id,last='') {
-		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.$_GET['keyword'] : '') ?>&page_id="+page_id+last + "&sortBy=" + v_sortBy + "&order=" + v_order);
+		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.rawurlencode($_GET['keyword']) : '') ?>&page_id="+page_id+last + "&sortBy=" + v_sortBy + "&order=" + v_order);
 		$('#submit').click();
 	}
 	function show_search_filter() {

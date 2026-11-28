@@ -72,7 +72,7 @@ if ($pt->second_page == 'videos') {
     } else {
         $db->where('privacy', 0);
     }
-    $videos = $db->where('user_id', $user_data->id)->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('is_short',0)->orderBy('id', 'DESC')->get(T_VIDEOS, 20, 'video_id');
+    $videos = $db->where('user_id', $user_data->id)->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('is_short',0)->orderBy('id', 'DESC')->get(T_VIDEOS, 20, PT_VideoCardColumns());
 }
 if ($pt->second_page == 'shorts') {
     if (IS_LOGGED == true) {
@@ -82,7 +82,7 @@ if ($pt->second_page == 'shorts') {
     } else {
         $db->where('privacy', 0);
     }
-    $videos = $db->where('user_id', $user_data->id)->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_short',1)->orderBy('id', 'DESC')->get(T_VIDEOS, 20, 'video_id');
+    $videos = $db->where('user_id', $user_data->id)->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_short',1)->orderBy('id', 'DESC')->get(T_VIDEOS, 20, PT_VideoCardColumns());
 }
 
 if ($pt->second_page == 'liked-videos') {
@@ -135,8 +135,10 @@ if ($pt->second_page == 'play-lists') {
 
 if (!empty($videos) && !$lists) {
     $videos_count = count($videos);
+    // Ordinary channel cards already have their video rows. Keep liked-list access behavior separate.
+    $channel_cards = $get_video_query == 1 ? PT_VideoCards($videos) : array();
     foreach ($videos as $key => $video) {
-        $video_get = $pt->video = PT_GetVideoByID($video->video_id, 0, 0, $get_video_query);
+        $video_get = $pt->video = $get_video_query == 1 ? $channel_cards[$key] : PT_GetVideoByID($video->video_id, 0, 0, $get_video_query);
         $video_id  = $video_get->id;
         if ($get_video_query == 2) {
             $video_id = $video->id;

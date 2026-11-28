@@ -69,36 +69,39 @@ if ($is_saved > 0) {
 
 $trending_list = '';
 
-if (!empty($pro_users)) {
-    $db->where('user_id', $pro_users, 'IN');
-    $db->where('time', time() - 172800, '>');
-    $db->where('privacy', $privacy,'IN');
-    $trending_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('live_time',0)->where('is_short', 0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit);
-}
+// YouPlay renders Popular from TOP_LIST; other themes still need Trending.
+if (($pt->config->theme ?? $pt->theme_using) !== 'youplay') {
+    if (!empty($pro_users)) {
+        $db->where('user_id', $pro_users, 'IN');
+        $db->where('time', time() - 172800, '>');
+        $db->where('privacy', $privacy,'IN');
+        $trending_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('live_time',0)->where('is_short', 0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit, PT_VideoCardColumns());
+    }
 
-if (empty($trending_data)) {
-    $db->where('time', time() - 172800, '>');
-    $db->where('privacy', $privacy,'IN');
-    $trending_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('live_time',0)->where('is_short', 0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit);
-}
+    if (empty($trending_data)) {
+        $db->where('time', time() - 172800, '>');
+        $db->where('privacy', $privacy,'IN');
+        $trending_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('live_time',0)->where('is_short', 0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit, PT_VideoCardColumns());
+    }
 
-foreach ($trending_data as $key => $video) {
-    $video = $pt->video =  PT_GetVideoByID($video, 0, 0, 0);
-    $trending_list .= PT_LoadPage('home/list', array(
-        'ID' => $video->id,
-        'TITLE' => $video->title,
-        'VIEWS' => number_format($video->views),
-        'VIEWS_NUM' => number_format($video->views),
-        'USER_DATA' => $video->owner,
-        'THUMBNAIL' => $video->thumbnail,
-        'URL' => $video->url,
-        'ajax_url' => $video->ajax_url,
-        'TIME' => $video->time_ago,
-        'DURATION' => $video->duration,
-        'VIDEO_ID' => $video->video_id_,
-        'VIDEO_ID_' => PT_Slug($video->title, $video->video_id),
-        'GIF' => $video->gif
-    ));
+    foreach (PT_VideoCards($trending_data) as $key => $video) {
+        $pt->video = $video;
+        $trending_list .= PT_LoadPage('home/list', array(
+            'ID' => $video->id,
+            'TITLE' => $video->title,
+            'VIEWS' => number_format($video->views),
+            'VIEWS_NUM' => number_format($video->views),
+            'USER_DATA' => $video->owner,
+            'THUMBNAIL' => $video->thumbnail,
+            'URL' => $video->url,
+            'ajax_url' => $video->ajax_url,
+            'TIME' => $video->time_ago,
+            'DURATION' => $video->duration,
+            'VIDEO_ID' => $video->video_id_,
+            'VIDEO_ID_' => PT_Slug($video->title, $video->video_id),
+            'GIF' => $video->gif
+        ));
+    }
 }
 
 $top_list = '';
@@ -107,16 +110,16 @@ if (!empty($pro_users)){
     $db->where('user_id', $pro_users, 'IN');
     $db->where('privacy', $privacy,'IN');
     $db->orderBy('views', 'DESC');
-    $top_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 4);
+    $top_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 4, PT_VideoCardColumns());
 }
 
 if (empty($top_data)) {
     $db->where('privacy', $privacy,'IN');
-    $top_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit);
+    $top_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->orderBy('views', 'DESC')->get(T_VIDEOS, $limit, PT_VideoCardColumns());
 }
 
-foreach ($top_data as $key => $video) {
-    $video = $pt->video =  PT_GetVideoByID($video, 0, 0, 0);
+foreach (PT_VideoCards($top_data) as $key => $video) {
+    $pt->video = $video;
     $top_list .= PT_LoadPage('home/list', array(
         'ID' => $video->id,
         'TITLE' => $video->title,
@@ -141,16 +144,16 @@ if ($pt->config->live_video == 1) {
         $db->where('user_id', $pro_users, 'IN');
         $db->where('privacy', $privacy,'IN');
         $db->orderBy('live_time', 'DESC');
-        $live_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0,'>')->get(T_VIDEOS, 4);
+        $live_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0,'>')->get(T_VIDEOS, 4, PT_VideoCardColumns());
     }
 
     if (empty($live_data)) {
         $db->where('privacy', $privacy,'IN');
-        $live_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0,'>')->orderBy('live_time', 'DESC')->get(T_VIDEOS, $limit);
+        $live_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0,'>')->orderBy('live_time', 'DESC')->get(T_VIDEOS, $limit, PT_VideoCardColumns());
     }
 
-    foreach ($live_data as $key => $video) {
-        $video = $pt->video = PT_GetVideoByID($video, 0, 0, 0);
+    foreach (PT_VideoCards($live_data) as $key => $video) {
+        $pt->video = $video;
         $live_list .= PT_LoadPage('home/list', array(
             'ID' => $video->id,
             'TITLE' => $video->title,
@@ -198,16 +201,16 @@ if (!empty($pro_users)) {
     $db->where('user_id', $pro_users, 'IN');
     $db->where('privacy', $privacy,'IN');
     $db->orderBy('id', 'DESC');
-    $latest_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, $limit);
+    $latest_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, $limit, PT_VideoCardColumns());
 }
 
 if (empty($latest_data)) {
     $db->where('privacy', $privacy,'IN');
-    $latest_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->orderBy('id', 'DESC')->get(T_VIDEOS, $limit);
+    $latest_data = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->orderBy('id', 'DESC')->get(T_VIDEOS, $limit, PT_VideoCardColumns());
 }
 
-foreach ($latest_data as $key => $video) {
-    $video = $pt->video =  PT_GetVideoByID($video, 0, 0, 0);
+foreach (PT_VideoCards($latest_data) as $key => $video) {
+    $pt->video = $video;
     $latest_list .= PT_LoadPage('home/list', array(
         'ID' => $video->id,
         'TITLE' => $video->title,
@@ -233,7 +236,7 @@ foreach ($categories as $cat_key => $cat_name) {
             $db->where("category_id = '$cat_key'");
             $db->where('privacy', $privacy,'IN');
             $db->orderBy('id', 'DESC');
-            $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10);
+            $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10, PT_VideoCardColumns());
             if (!empty($pt->cat_videos)) {
                 $video_categories_html .= PT_LoadPage('home/categories',array(
                     'CATEGORY_ONE_NAME' => $cat_name,
@@ -248,7 +251,7 @@ foreach ($categories as $cat_key => $cat_name) {
                 $db->where("category_id = '$cat_key'");
                 $db->where('privacy', $privacy,'IN');
                 $db->orderBy('id', 'DESC');
-                $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10);
+                $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10, PT_VideoCardColumns());
                 if (!empty($pt->cat_videos)) {
                     $video_categories_html .= PT_LoadPage('home/categories',array(
                         'CATEGORY_ONE_NAME' => $cat_name,
@@ -261,7 +264,7 @@ foreach ($categories as $cat_key => $cat_name) {
             $db->where("category_id = '$cat_key'");
             $db->where('privacy', $privacy,'IN');
             $db->orderBy('id', 'DESC');
-            $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10);
+            $pt->cat_videos = $db->where('is_movie', 0)->where('user_id',$pt->blocked_array , 'NOT IN')->where('approved',1)->where('is_short', 0)->where('live_time',0)->get(T_VIDEOS, 10, PT_VideoCardColumns());
             if (!empty($pt->cat_videos)) {
                 $video_categories_html .= PT_LoadPage('home/categories',array(
                     'CATEGORY_ONE_NAME' => $cat_name,

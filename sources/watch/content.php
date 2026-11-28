@@ -351,12 +351,11 @@ $pt->have_video_sidebar = true;
 if (!empty($next_up_videos) && !empty($next_up_videos[0])) {
     array_unshift($related_videos , $next_up_videos[0]);
 }
-foreach ($related_videos as $key => $related_video) {
+foreach (PT_VideoCards($related_videos) as $key => $related_video) {
     if ($sidebar_videos_shown >= $watch_sidebar_initial_limit) {
         break;
     }
     if (empty($next_up_videos) || (!empty($next_up_videos) && !empty($next_up_videos[0]) && $next_up_videos[0]->id != $related_video->id)) {
-        $related_video  = PT_GetVideoByID($related_video, 0, 0, 0);
         $video_sidebar .= PT_LoadPage('watch/video-sidebar', array(
             'ID' => $related_video->id,
             'TITLE' => $related_video->title,

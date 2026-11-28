@@ -23,8 +23,8 @@
 		<div class="videos">
 			<div class="row pt_cat_vid_list cus_slider">
 				<?php 
-					foreach ($pt->cat_videos as $key => $video) {
-						$video = PT_GetVideoByID($video, 0, 0, 0);
+					foreach (PT_VideoCards($pt->cat_videos) as $key => $video) {
+						$pt->video = $video;
 						echo PT_LoadPage('home/list', array(
 							'ID' => $video->id,
 							'TITLE' => $video->title,

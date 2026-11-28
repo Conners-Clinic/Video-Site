@@ -48,7 +48,7 @@ if ($page == 'trending') {
     // $videos = $db->where('time', time() - 172800, '>')->orderBy('views', 'DESC')->get(T_VIDEOS, $limit);
 
     // pagination system 
-    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('time', time() - 172800, '>')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->where('views', 0,'!=')->orderBy('views', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('time', time() - 172800, '>')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->where('views', 0,'!=')->orderBy('views', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
     $pt->total_pages = $db->totalPages;
     // pagination system 
 } 
@@ -59,7 +59,7 @@ else if ($page == 'latest') {
     // $videos = $db->orderBy('id', 'DESC')->get(T_VIDEOS, $limit);
 
     // pagination system 
-    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('id', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('id', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
     $pt->total_pages = $db->totalPages;
     // pagination system 
 } 
@@ -69,7 +69,7 @@ else if ($page == 'live') {
     // $videos = $db->orderBy('id', 'DESC')->get(T_VIDEOS, $limit);
 
     // pagination system 
-    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0,'>')->where('approved',1)->where('is_short', 0)->orderBy('live_time', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0,'>')->where('approved',1)->where('is_short', 0)->orderBy('live_time', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
     $pt->total_pages = $db->totalPages;
     // pagination system 
 } 
@@ -99,7 +99,7 @@ else if ($page == 'stock' && $pt->config->stock_videos == 'on' && $pt->config->s
     // $videos = $db->orderBy('id', 'DESC')->get(T_VIDEOS, $limit);
 
     // pagination system 
-    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_stock',1)->where('approved',1)->where('is_short', 0)->orderBy('live_time', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+    $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_stock',1)->where('approved',1)->where('is_short', 0)->orderBy('live_time', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
     $pt->total_pages = $db->totalPages;
     // pagination system 
 } 
@@ -151,7 +151,7 @@ else if ($page == 'top') {
 
     if ($pt->cat_type == 'all_time') {
         // pagination system 
-        $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('views', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+        $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('views', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
         $pt->total_pages = $db->totalPages;
         
         // pagination system 
@@ -161,12 +161,12 @@ else if ($page == 'top') {
 
         $rows = $db->rawQuery('SELECT COUNT(*) FROM '.T_VIEWS.' v WHERE `time` >= '.$start.' AND `time` <= '.$end.'  AND (SELECT id FROM '.T_VIDEOS.' WHERE id = v.video_id AND is_movie = 0 AND privacy = 0 AND live_time = 0 AND is_short = 0 AND user_id NOT IN ('.implode(",", $pt->blocked_array).') AND approved = 1) = video_id GROUP BY video_id');
 
-        $new = new stdClass();
-        foreach ($videos as $key => $value) {
-            $new->{$key} = PT_GetVideoByID($value->video_id, 0, 0, 2);
-            // $new->{$key} = $db->where('id',$value->video_id)->getOne(T_VIDEOS);
-        }
-        $videos = $new;
+        $ranked_ids = array_map(static function ($row) { return (int) $row->video_id; }, $videos);
+        $ranked_rows = $ranked_ids ? $db->where('id', $ranked_ids, 'IN')->get(T_VIDEOS, null, PT_VideoCardColumns()) : array();
+        $ranked_by_id = array();
+        foreach ($ranked_rows as $row) { $ranked_by_id[$row->id] = $row; }
+        $videos = array();
+        foreach ($ranked_ids as $ranked_id) { if (isset($ranked_by_id[$ranked_id])) { $videos[] = $ranked_by_id[$ranked_id]; } }
         $pt->total_pages = ceil(count($rows) / $limit);
 
         $pt->page_url_ = $pt->config->site_url.'/videos/'.$page.'?page_id='.$pt->page_number.'&type='.$pt->cat_type;
@@ -209,7 +209,7 @@ else if ($page == 'category') {
             // $videos   = $db->where('category_id = "' . $cateogry . '" OR category_id = "' . $category_old . '"')->orderBy('id', 'DESC')->get(T_VIDEOS, $limit);
 
             // pagination system 
-            $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('category_id = "' . $cateogry.'"')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('id', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number);
+            $videos = $db->where('privacy', $privacy,'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->where('category_id = "' . $cateogry.'"')->where('is_movie',0)->where('live_time',0)->where('approved',1)->where('is_short', 0)->orderBy('id', 'DESC')->objectbuilder()->paginate(T_VIDEOS, $pt->page_number, PT_VideoCardColumns());
             $pt->total_pages = $db->totalPages;
             // pagination system 
             
@@ -282,14 +282,8 @@ foreach ($pt->sub_categories as $cat_key => $subs) {
 
 $html_videos = '';
 if (!empty($videos)) {
-    foreach ($videos as $key => $video) {
-        if ($page != 'top') {
-            $video = $pt->video = PT_GetVideoByID($video, 0, 0, 0);
-        }
-        elseif ($page == 'top' && !empty($pt->cat_type) && $pt->cat_type == 'all_time') {
-            $video = $pt->video = PT_GetVideoByID($video, 0, 0, 0);
-        }
-        	
+    foreach (PT_VideoCards($videos) as $key => $video) {
+        $pt->video = $video;
         $html_videos .= PT_LoadPage('videos/list', array(
             'ID' => $video->id,
             'VID_ID' => $video->id,

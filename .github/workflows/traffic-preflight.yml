@@ -39,14 +39,14 @@ jobs:
             ini_set('display_errors', '0');
             ini_set('log_errors', '0');
             set_time_limit(90);
-            
+
             function gitRead($root, $arguments) {
                 if (!function_exists('exec')) { return null; }
                 $lines = array(); $status = 1;
                 exec('git --no-optional-locks -C ' . escapeshellarg($root) . ' ' . $arguments . ' 2>/dev/null', $lines, $status);
                 return $status === 0 ? implode("\n", $lines) : null;
             }
-            
+
             function readSiteConfig($file) {
                 $level = ob_get_level();
                 ob_start();
@@ -56,7 +56,7 @@ jobs:
                     while (ob_get_level() > $level) { ob_end_clean(); }
                 }
             }
-            
+
             function publicTree($root, $revision) {
                 $text = gitRead($root, 'ls-tree -r ' . escapeshellarg($revision));
                 $out = array();
@@ -67,7 +67,7 @@ jobs:
                 }
                 return $out;
             }
-            
+
             function mediaChangeSummary($root) {
                 $path = 'assets/includes/functions_one.php';
                 $original = gitRead($root, 'show HEAD:' . $path);
@@ -81,7 +81,7 @@ jobs:
                     'only_known_media_suffix_removed' => str_replace(' . "?a"', '', $original) === $actual,
                 );
             }
-            
+
             function inspectSite($label, $candidates, $expectedHost, $salt, &$identities) {
                 $result = array('candidate_directories_found' => 0, 'directory_found' => false);
                 $roots = array();
@@ -227,7 +227,7 @@ jobs:
                 }
                 return $result;
             }
-            
+
             $production = '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com';
             $report = array(
                 'mode' => 'read_only_access_preflight',

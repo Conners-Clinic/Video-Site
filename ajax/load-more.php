@@ -500,48 +500,19 @@ else {
 		    $data = array('status' => 200, 'videos' => $final);
 		}
 	} else if ($type == 'search') {
-		$keyword = '';
-		$category = '';
-		$date = '';
-		if (!empty($_POST['keyword'])) {
-			$keyword = PT_Secure($_POST['keyword']);
-		}
-		if (!empty($keyword)) {
-			if (isset($_POST['category']) && !empty($_POST['category'])) {
-		        $cat_id = $_POST['category'];
-		        $category = " AND category_id IN (".$cat_id.") ";
-		    }
-		    if (isset($_POST['date']) && !empty($_POST['date'])) {
-		        if ($_POST['date'] == 'last_hour') {
-		            $time = time()-(60*60);
-		            $date = " AND time >= ".$time." ";
-		        }
-		        elseif ($_POST['date'] == 'today') {
-		            $time = time()-(60*60*24);
-		            $date = " AND time >= ".$time." ";
-		        }
-		        elseif ($_POST['date'] == 'this_week') {
-		            $time = time()-(60*60*24*7);
-		            $date = " AND time >= ".$time." ";
-		        }
-		        elseif ($_POST['date'] == 'this_month') {
-		            $time = time()-(60*60*24*30);
-		            $date = " AND time >= ".$time." ";
-		        }
-		        elseif ($_POST['date'] == 'this_year') {
-		            $time = time()-(60*60*24*365);
-		            $date = " AND time >= ".$time." ";
-		        }
-		    }
-			if ($pt->config->total_videos > 1000000) {
-			    $videos = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE MATCH (title) AGAINST ('$keyword') AND id > $id AND privacy = 0 ".$category.$date." ORDER BY id ASC LIMIT 40");
-			} else {
-			    $videos = $db->rawQuery("SELECT * FROM " . T_VIDEOS . " WHERE title LIKE '%$keyword%' AND id > $id AND privacy = 0 ".$category.$date." ORDER BY id ASC LIMIT 40");
-			}
+		$term = PT_SearchTerm($_POST['keyword'] ?? null);
+		if ($term !== null) {
+            $videos = PT_SearchVideoRows($db, $term, array(
+                'admin' => $pt->admin === true, 'blocked' => $pt->blocked_array,
+                'categories' => empty($_POST['category']) ? array() : explode(',', $_POST['category']),
+                'date' => is_string($_POST['date'] ?? null) ? $_POST['date'] : '',
+                'after_id' => $id, 'limit' => 40
+            ));
 			if (!empty($videos)) {
 			    $len = count($videos);
-			    foreach ($videos as $key => $video) {
-			        $video = PT_GetVideoByID($video, 0, 0, 0);
+			    foreach (PT_VideoCards($videos) as $key => $video) {
+			        
+                    $pt->q = $video;
 			        $pt->last_video = false;
 			        if ($key == $len - 1) {
 			            $pt->last_video = true;
@@ -551,6 +522,7 @@ else {
 			            'USER_DATA' => $video->owner,
 			            'THUMBNAIL' => $video->thumbnail,
 			            'URL' => $video->url,
+                        'ajax_url' => $video->ajax_url,
 			            'TITLE' => $video->title,
 			            'DESC' => $video->list_description,
 			            'VIEWS' => $video->views,

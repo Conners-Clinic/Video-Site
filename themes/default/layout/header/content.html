@@ -100,7 +100,7 @@
 			
 			<form class="navbar-form navbar-left search-header" role="search" action="{{LINK search}}" method="GET">
                 <div class="form-group">
-                    <input type="text" class="form-control" id="search-bar" name="keyword" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}"> 
+                    <input type="text" class="form-control" id="search-bar" name="keyword" minlength="2" maxlength="200" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}"> 
                     <?php
                     if (!empty($_GET['is_channel'])) {
                     ?>
@@ -283,7 +283,7 @@
 	<div class="navbar-header">
 		<form class="search-header-mobile" role="search" action="{{LINK search}}" method="GET">
 			<div class="form-group">
-				<input type="text" class="form-control" id="search-bar-mobile" name="keyword" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}"> 
+				<input type="text" class="form-control" id="search-bar-mobile" name="keyword" minlength="2" maxlength="200" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}"> 
 			</div>
 			<div class="search-dropdown hidden"></div>
 		</form>
@@ -378,6 +378,7 @@
 </script>
 <?php endif ?>
 
+<script src="{{CONFIG site_url}}/assets/js/search-suggestions.js?v=20261128"></script>
 <script>
 $('.search-icon').on('click', function(event) {
 	event.preventDefault();
@@ -396,26 +397,7 @@ if(current_width <= 1300) {
 	});
 }
 
-$('#search-bar').keyup(function(event) {
-	var search_value = $(this).val();
-	var search_dropdown = $('.search-dropdown');
-	if (search_value == '') {
-		search_dropdown.addClass('hidden');
-		search_dropdown.empty();
-		return false;
-	} else {
-		search_dropdown.removeClass('hidden');
-	}
-    $.post('{{LINK aj/search}}', {search_value: search_value}, function(data, textStatus, xhr) {
-    	if (data.status == 200) {
-    		search_dropdown.html(data.html);
-    	} else {
-	       search_dropdown.addClass('hidden');
-		   search_dropdown.empty();
-		   return false;
-    	}
-    });
-});
+PTSearchSuggestions.mount(jQuery, '{{LINK aj/search}}');
 
 jQuery(document).click(function(event){
     if (!(jQuery(event.target).closest(".search-dropdown").length)) {

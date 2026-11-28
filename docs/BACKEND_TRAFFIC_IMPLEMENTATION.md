@@ -23,7 +23,7 @@ No new paid service or bulk transcription is part of this work.
 - [ ] Preserve and reconcile deployment checkout differences without discarding work.
 - [ ] Establish effective web runtime, scheduler, request/query baseline and staging test isolation.
 - [ ] Repair fail-fast, exact-revision deployment and rehearse rollback.
-- [ ] Batch language/category metadata and reuse request-local reads.
+- [x] Batch language/category metadata and reuse request-local reads (staging component comparison passed).
 - [ ] Introduce bounded card projections and batch displayed related/personal fields.
 - [ ] Debounce and bound search; preserve channels, numbered pages and relevant terms.
 - [ ] Reuse transcript records and remove theme-specific unused homepage work.
@@ -70,8 +70,39 @@ external services or jobs are isolated.
 - Live preflight only reports allowlisted diagnostics; credentials, grants text,
   raw database contents, local patches and scheduler command lines stay private.
 
+## Implemented candidate changes
+
+- Language metadata is one query rather than 46 on the staging dataset. Categories
+  use two queries rather than 15. The caption helper reuses its loaded transcript
+  rather than reading it again. Exact output comparisons passed in run 46142817989.
+- Search accepts 2–200 Unicode characters and at most 12 words. Header suggestions
+  wait 300 ms, cancel obsolete requests, support composition/paste and ignore stale
+  responses. Public/unlisted approval rules are shared across search handlers.
+  Channel discovery and numbered pages remain. Literal `%`/`_` no longer expand
+  as wildcards. No full-text engine switch is introduced.
+- Suggestions select only link/title fields. Browse, home, category, channel and
+  related cards batch public owner fields. The displayed layouts do not consume
+  purchases, votes, resume state or comment totals; those remain in the full watch
+  loader. Card caches contain public fields only and last for one request.
+- Only the effective YouPlay theme skips unused Trending work. Its font metadata
+  says `default`, so this decision uses the configured/session theme instead.
+
+## Measured component results
+
+| Staging component | Before queries | After queries | Exact output |
+| --- | ---: | ---: | --- |
+| Language menus, 23 languages | 46 | 1 | Equal |
+| Category navigation, 15 displayed categories | 15 | 2 | Equal |
+| Caption link with existing transcript | 2 | 1 | Equal |
+
+These are component measurements, not an HTTP load test or a capacity claim.
+The production-version CLI also passed all existing suites and 46 read-helper
+assertions. Card tests compare actual template HTML for both themes and guest/
+signed-in fixtures at 10 and 20 items. Real staging card/search comparisons are
+pending for the latest candidate.
+
 ## Next step
 
-Compare the interrupted rebase's staged/conflicted files with known public
-commits and inspect the staging media-helper change. Preserve server-local state
-before changing deployments, then establish the staging performance baseline.
+Run the candidate's read-only card/search comparisons, preserve checkout state
+privately, and establish a safe staging release and rollback path. Production is
+still unchanged and remains in its interrupted rebase.
