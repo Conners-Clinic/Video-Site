@@ -2,7 +2,7 @@
 /** Temporarily test an exact candidate on staging, preserve its local patch, then roll back. */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit(1); }
 error_reporting(E_ALL); ini_set('display_errors', '0'); ini_set('log_errors', '0'); umask(0077);
-set_time_limit(180);
+set_time_limit(900);
 $phase = 'arguments'; $journal = null; $root = null; $flag = null; $stash = null;
 $original = null; $originalFunction = null; $originalStartup = null; $instrumented = false; $switched = false;
 $report = array('environment' => 'staging', 'production_changed' => false, 'capacity_test' => false, 'signed_in_http_test' => false);
@@ -35,6 +35,38 @@ function rehearsalHttp($url, $cookie, $key, $post = null) {
 }
 function rehearsalPercentile($values, $fraction) {
     sort($values, SORT_NUMERIC); return round($values[max(0, (int) ceil(count($values) * $fraction) - 1)], 3);
+}
+function rehearsalConcurrency($urls, $key) {
+    $result = array();
+    foreach (array(2, 5) as $concurrency) {
+        $times = array();
+        for ($batch = 0; $batch < 4; $batch++) {
+            $multi = curl_multi_init(); $handles = array();
+            try {
+                for ($i = 0; $i < $concurrency; $i++) {
+                    $url = $urls[($batch + $i) % count($urls)];
+                    $handle = curl_init($url . (strpos($url, '?') === false ? '?' : '&') . 'traffic_probe=' . bin2hex(random_bytes(6)));
+                    curl_setopt_array($handle, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false,
+                        CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 6, CURLOPT_ENCODING => '',
+                        CURLOPT_HTTPHEADER => array('X-Traffic-Benchmark: ' . $key, 'Cache-Control: no-cache')));
+                    $handles[] = $handle; curl_multi_add_handle($multi, $handle);
+                }
+                do { curl_multi_exec($multi, $running); if ($running) { curl_multi_select($multi, .25); } } while ($running);
+                foreach ($handles as $handle) {
+                    $body = curl_multi_getcontent($handle); $status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+                    $ms = curl_getinfo($handle, CURLINFO_TOTAL_TIME) * 1000;
+                    if ($status !== 200 || !is_string($body) || strlen($body) < 1000 || $ms > 5000) { throw new RuntimeException('Concurrent smoke or latency threshold failed'); }
+                    $times[] = $ms;
+                }
+            } finally {
+                foreach ($handles as $handle) { curl_multi_remove_handle($multi, $handle); curl_close($handle); }
+                curl_multi_close($multi);
+            }
+        }
+        $result[] = array('concurrent_requests' => $concurrency, 'requests' => count($times), 'errors' => 0,
+            'p50_ms' => rehearsalPercentile($times, .5), 'p95_ms' => rehearsalPercentile($times, .95));
+    }
+    return $result;
 }
 function rehearsalJourney($site, $watch, $directory, $key, $candidate) {
     $cookie = $directory . '/cookies';
@@ -91,7 +123,7 @@ function rehearsalMetrics($path) {
     return $result;
 }
 try {
-    $options = getopt('', array('site-root:', 'private-base:', 'target:'));
+    $options = getopt('', array('site-root:', 'private-base:', 'target:', 'browser-window:'));
     $root = realpath($options['site-root'] ?? ''); $private = realpath($options['private-base'] ?? ''); $target = $options['target'] ?? '';
     if (!$root || !$private || strpos($private . '/', $root . '/') === 0 || !preg_match('/^[a-f0-9]{40}$/D', $target)) { throw new RuntimeException('Invalid rehearsal arguments'); }
     $journal = $private . '/rehearsal-' . gmdate('YmdHis') . '-' . bin2hex(random_bytes(4));
@@ -165,8 +197,17 @@ try {
     rehearsalWrite($flag, json_encode(array('key_hash' => hash('sha256', $key), 'expires' => time() + 600, 'log_path' => $journal . '/candidate/metrics.jsonl')));
     $report['candidate_http'] = rehearsalJourney($site, $watch, $journal . '/candidate', $key, true);
     $report['candidate_php'] = rehearsalMetrics($journal . '/candidate/metrics.jsonl');
+    $phase = 'bounded_concurrency';
+    $report['bounded_concurrency'] = rehearsalConcurrency(array($site . '/', $site . '/search?keyword=Rife', $watch), $key);
     $report['candidate_revision'] = $target; $report['server_media_customization_preserved'] = true;
     $report['status'] = 'passed';
+    $browserSeconds = min(600, max(0, (int) ($options['browser-window'] ?? 0)));
+    if ($browserSeconds > 0) {
+        echo "TRAFFIC_BROWSER_REVIEW_READY=staging candidate passed automated checks; automatic rollback remains armed\n";
+        flush();
+        $deadline = time() + $browserSeconds;
+        while (time() < $deadline) { sleep(1); }
+    }
 } catch (Throwable $error) {
     $report['status'] = 'failed'; $report['phase'] = $phase; $report['error_code'] = (int) $error->getCode();
     if ($journal) { file_put_contents($journal . '/failure.txt', $phase . "\n" . $error->getMessage()); }
