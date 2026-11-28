@@ -79,11 +79,43 @@ jobs:
                 $result['git_branch'] = in_array($branch, array('main', 'super'), true) ? $branch : 'other_or_detached';
                 $changes = gitRead($root, 'status --porcelain --untracked-files=no');
                 $result['tracked_change_count'] = $changes === null ? null : ($changes === '' ? 0 : count(explode("\n", $changes)));
+                $result['change_status_counts'] = array();
+                $result['changed_application_paths'] = array();
+                $knownPaths = array('assets/init.php', 'assets/includes/app_start.php', 'assets/includes/functions_one.php',
+                    'assets/includes/functions_general.php', 'assets/includes/functions_transcribe.php',
+                    'ajax/search.php', 'ajax/user.php', 'sources/home/content.php', 'sources/watch/content.php',
+                    'sources/search/content.php', 'themes/youplay/layout/container.html',
+                    'themes/youplay/layout/header/content.html', '.htaccess', '.github/workflows/deploy.yml');
+                foreach ($changes === null || $changes === '' ? array() : explode("\n", $changes) as $change) {
+                    $state = substr($change, 0, 2);
+                    $result['change_status_counts'][$state] = ($result['change_status_counts'][$state] ?? 0) + 1;
+                    $path = substr($change, 3);
+                    if (in_array($path, $knownPaths, true)) { $result['changed_application_paths'][] = $path; }
+                }
+                $result['key_file_sha256'] = array();
+                foreach ($knownPaths as $path) {
+                    if (is_file($root . '/' . $path)) { $result['key_file_sha256'][$path] = hash_file('sha256', $root . '/' . $path); }
+                }
                 $result['unfinished_git_operations'] = array();
                 foreach (array('rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD') as $operation) {
                     $location = gitRead($root, 'rev-parse --git-path ' . escapeshellarg($operation));
                     if ($location !== null && file_exists($location[0] === '/' ? $location : $root . '/' . $location)) {
                         $result['unfinished_git_operations'][] = $operation;
+                    }
+                }
+                $rebaseDir = gitRead($root, 'rev-parse --git-path rebase-merge');
+                if ($rebaseDir !== null) {
+                    $rebaseDir = $rebaseDir[0] === '/' ? $rebaseDir : $root . '/' . $rebaseDir;
+                    if (is_dir($rebaseDir)) {
+                        $result['rebase'] = array();
+                        foreach (array('orig-head', 'onto', 'stopped-sha') as $name) {
+                            $value = is_readable($rebaseDir . '/' . $name) ? trim(file_get_contents($rebaseDir . '/' . $name)) : '';
+                            $result['rebase'][$name] = preg_match('/^[a-f0-9]{40}$/D', $value) ? $value : null;
+                        }
+                        foreach (array('done', 'git-rebase-todo') as $name) {
+                            $lines = is_readable($rebaseDir . '/' . $name) ? file($rebaseDir . '/' . $name, FILE_IGNORE_NEW_LINES) : array();
+                            $result['rebase'][$name . '_command_count'] = count(array_filter($lines, static function ($v) { return preg_match('/^\s*(pick|reword|edit|squash|fixup|exec|break|drop|label|reset|merge|update-ref)\b/', $v); }));
+                        }
                     }
                 }
                 if (!$result['config_readable']) { $result['status'] = 'config_unreadable'; return $result; }
