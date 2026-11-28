@@ -78,7 +78,7 @@ jobs:
                 printf 'PHP lint failed: %s\n' "$source"; exit 1
               fi
             done
-            for suite in tests/run.php tests/watch-library.php tests/sidebar-menu.php tests/export_inventory_check.php tests/traffic-reads.php tests/traffic-search.php tests/traffic-cards.php; do
+            for suite in tests/run.php tests/watch-library.php tests/sidebar-menu.php tests/export_inventory_check.php tests/traffic-reads.php tests/traffic-search.php tests/traffic-cards.php tests/traffic-metrics.php; do
               if ! php "$suite" >test.log 2>&1; then
                 printf 'Regression failed: %s; details retained privately\n' "$suite"; exit 1
               fi

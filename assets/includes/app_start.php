@@ -56,6 +56,8 @@ $query = $mysqli->query("SET NAMES utf8mb4");
 // Connecting to DB after verfication
 
 $db = new MysqliDb($mysqli);
+require_once __DIR__ . '/traffic_metrics.php';
+PT_TrafficBeginRequest($db);
 
 
 $http_header = 'http://';
