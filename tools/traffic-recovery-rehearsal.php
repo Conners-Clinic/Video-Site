@@ -24,6 +24,7 @@ try {
     recoveryProcess(array('tar', '-C', $root, '-czf', $archive, '--null', '-T', $directory . '/files.nul'), $log);
     recoveryProcess(array('tar', '-C', $copy, '-xzf', $archive), $log);
     $phase = 'private_recovery';
+    if (realpath(trim(trafficRebaseGit($copy, array('rev-parse', '--show-toplevel')))) !== realpath($copy)) { throw new RuntimeException('Copied Git metadata points outside the private rehearsal'); }
     mkdir($directory . '/preserved', 0700); $preserved = 0;
     foreach (array('.claude/skills/continuity-onboard', '.claude/skills/handoff', '.claude/skills/pickup') as $path) {
         if (is_dir($copy . '/' . $path) && !is_link($copy . '/' . $path)) {

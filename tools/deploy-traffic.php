@@ -18,6 +18,31 @@ function releaseWrite($path, $bytes, $mode = 0644) {
     $temporary = dirname($path) . '/.traffic-release-' . bin2hex(random_bytes(6));
     if (file_put_contents($temporary, $bytes, LOCK_EX) !== strlen($bytes) || !chmod($temporary, $mode) || !rename($temporary, $path)) { throw new RuntimeException('Atomic write failed'); }
 }
+function releaseFpmSource($tokenHash) {
+    return '<?php if (!hash_equals(' . var_export($tokenHash, true)
+        . ', hash("sha256", $_SERVER["HTTP_X_TRAFFIC_RELEASE"] ?? ""))) { http_response_code(404); exit; }'
+        . 'header("Content-Type: application/json"); header("Cache-Control: no-store");'
+        . '$enabled=function_exists("opcache_get_status") && (bool)ini_get("opcache.enable"); $invalidated=0; $ok=true;'
+        . 'if($enabled){$status=opcache_get_status(true); if(!is_array($status)){$ok=false;}else{'
+        . 'foreach(array_keys($status["scripts"]??array()) as $path){if(strpos($path, __DIR__."/")===0){'
+        . 'if(!opcache_invalidate($path,true)){$ok=false;}else{$invalidated++;}}}}}'
+        . 'echo json_encode(array("ok"=>$ok,"php"=>PHP_VERSION,"sapi"=>PHP_SAPI,"opcache_enabled"=>$enabled,"site_scripts_invalidated"=>$invalidated));';
+}
+function releaseFpmCache($root, $site) {
+    $token = bin2hex(random_bytes(32)); $name = '_traffic_release_' . bin2hex(random_bytes(16)) . '.php';
+    $file = $root . '/' . $name;
+    $source = releaseFpmSource(hash('sha256', $token));
+    try {
+        releaseWrite($file, $source, 0600);
+        $curl = curl_init($site . '/' . $name);
+        curl_setopt_array($curl, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => false, CURLOPT_HTTPHEADER => array('X-Traffic-Release: ' . $token)));
+        $body = curl_exec($curl); $code = curl_getinfo($curl, CURLINFO_HTTP_CODE); curl_close($curl);
+        $result = $code === 200 && is_string($body) ? json_decode($body, true) : null;
+        if (!is_array($result) || empty($result['ok'])) { throw new RuntimeException('Web runtime cache verification failed'); }
+        return $result;
+    } finally { if (is_file($file)) { unlink($file); } }
+}
 function releaseSmoke($site, $watchKey = null) {
     $routes = array('/' => 'html', '/search?keyword=Rife' => 'html',
         '/assets/js/search-suggestions.js' => 'script', '/assets/js/background-poll.js' => 'script', '/assets/js/playlist-navigation.js' => 'script');
@@ -53,6 +78,7 @@ try {
     $site = rtrim($settings['site_url'] ?? '', '/');
     if (parse_url($site, PHP_URL_HOST) !== $host) { throw new RuntimeException('Environment hostname mismatch'); }
     $phase = 'revision_guards';
+    if (realpath(releaseGit($root, array('rev-parse', '--show-toplevel'), $log)) !== $root) { throw new RuntimeException('Checkout points outside expected site'); }
     $remote = releaseGit($root, array('ls-remote', 'https://github.com/Conners-Clinic/Video-Site.git', 'refs/heads/' . $branch), $log);
     if (substr($remote, 0, 40) !== $target) { throw new RuntimeException('A newer branch revision superseded this release'); }
     $originalHead = releaseGit($root, array('rev-parse', 'HEAD'), $log);
@@ -74,7 +100,7 @@ try {
     releaseGit($root, array('fetch', '--quiet', '--no-tags', 'https://github.com/Conners-Clinic/Video-Site.git', $target), $log);
     releaseGit($root, array('merge-base', '--is-ancestor', $recovery ? '07ec37f96dd0c3f9dc0fca256a9d849b37be0a46' : $originalHead, $target), $log);
     $phase = 'candidate_regression';
-    foreach (array('tests/run.php', 'tests/watch-library.php', 'tests/sidebar-menu.php', 'tests/export_inventory_check.php', 'tests/traffic-reads.php', 'tests/traffic-search.php', 'tests/traffic-cards.php', 'tests/traffic-budgets.php', 'tests/traffic-metrics.php') as $suite) {
+    foreach (array('tests/run.php', 'tests/watch-library.php', 'tests/sidebar-menu.php', 'tests/export_inventory_check.php', 'tests/traffic-reads.php', 'tests/traffic-search.php', 'tests/traffic-cards.php', 'tests/traffic-budgets.php', 'tests/traffic-metrics.php', 'tests/traffic-release.php') as $suite) {
         releaseCommand(array(PHP_BINARY, $candidate . '/' . $suite), $log);
     }
     releaseCommand(array(PHP_BINARY, $candidate . '/tests/traffic-cards.php', '--signed'), $log);
@@ -135,6 +161,7 @@ try {
     if ($overlay !== null) { releaseWrite($root . '/assets/includes/functions_one.php', $overlay, 0755); }
     if (releaseGit($root, array('rev-parse', 'HEAD'), $log) !== $target || hash_file('sha256', $root . '/config.php') !== $configHash) { throw new RuntimeException('Revision/configuration verification failed'); }
     $phase = 'smoke';
+    $runtime = releaseFpmCache($root, $site);
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     $connection = new mysqli($settings['sql_db_host'], $settings['sql_db_user'], $settings['sql_db_pass'], $settings['sql_db_name']);
     $connection->query('SET SESSION max_statement_time = 5');
@@ -144,6 +171,7 @@ try {
     $report = array('status' => 'passed', 'environment' => $environment, 'revision' => $target,
         'known_rebase_recovered' => $recovery, 'helper_directories_preserved' => count($preservedDirectories), 'private_backup_verified' => true, 'local_media_overlay_preserved' => $overlay !== null,
         'configuration_unchanged' => true, 'http_smoke_checks' => $smokes, 'migrations_passed' => true);
+    $report['web_runtime'] = $runtime;
     file_put_contents($private . '/latest-release-' . $environment . '.json', json_encode(array('journal' => $journal, 'target' => $target)));
 } catch (Throwable $error) {
     $report = array('status' => 'failed', 'phase' => $phase, 'error_code' => (int) $error->getCode());
@@ -177,6 +205,7 @@ try {
             }
             releaseCommand(array('tar', '-C', $root, '-xzf', $snapshot), $log);
             if (releaseGit($root, array('rev-parse', 'HEAD'), $log) !== $originalHead || hash_file('sha256', $root . '/config.php') !== $configHash) { throw new RuntimeException('Rollback identity mismatch'); }
+            releaseFpmCache($root, $site);
             $report['original_checkout_restored'] = true;
         } catch (Throwable $rollbackError) {
             $report['manual_recovery_required'] = true;

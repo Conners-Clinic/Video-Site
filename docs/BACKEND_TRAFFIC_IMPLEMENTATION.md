@@ -21,19 +21,19 @@ No new paid service or bulk transcription is part of this work.
 - [x] Verify staging and production have distinct connected database identities.
 - [x] Inventory current server revisions, checkout state, and CLI/database versions.
 - [ ] Preserve and reconcile deployment checkout differences without discarding work.
-- [ ] Establish effective web runtime, scheduler, request/query baseline and staging test isolation.
-- [ ] Repair fail-fast, exact-revision deployment and rehearse rollback.
+- [x] Establish effective web runtime, request/query baseline and staging fixture isolation; hosting scheduler/pool settings remain outside observed access.
+- [x] Implement fail-fast exact-revision deployment, config-only migration runner, private backups and rollback; exercise staging rollback and recovery on a private production copy.
 - [x] Batch language/category metadata and reuse request-local reads (staging component comparison passed).
 - [x] Introduce bounded card projections and batch displayed related/personal fields (component and template parity tests).
 - [x] Debounce and bound search; preserve channels, numbered pages and relevant terms (fixtures pass; browser rehearsal pending).
 - [x] Reuse transcript records and remove theme-specific unused homepage work.
-- [ ] Add public data caching only with invalidation and current access checks.
-- [ ] Bound playlists, Watch Later, comments and replies with navigation continuity.
+- [x] Cache public metadata/owner fields within a request; retain current access checks. Defer cross-request/full-page caching after measured staging improvements.
+- [x] Bound playlist windows, Watch Later, channel playlist lists, comment permalinks and replies with navigation continuity.
 - [ ] Control both notification transports and verify unattended publication before scheduler cutover.
-- [ ] Apply measured route budgets/session-lock changes and inspect worker isolation.
-- [ ] Review index plans and implement only justified migrations.
-- [ ] Reduce unnecessary assets and media loading with AJAX-navigation verification.
-- [ ] Run candidate regression and bounded staging traffic checks.
+- [x] Apply measured viewer-route budgets and release the autocomplete session lock after security checks; preserve separate upload/job behavior. Hosting worker-pool settings remain unverified.
+- [x] Review index plans; defer production index builds without representative build/lock evidence. Add a guarded migration entrypoint for future approved changes.
+- [x] Add native thumbnail loading hints and verify search-to-watch-to-channel AJAX navigation, transcripts and playback in staging.
+- [x] Run candidate regression, disposable MariaDB fixtures, guest browser checks and bounded staging concurrency bursts.
 - [ ] Deploy the tested revision, verify production and document measured results/limits.
 
 ## Verified environment and current deployment blockers
@@ -46,8 +46,8 @@ directories. No database mutations or application deployments were performed.
 The observed CLI is PHP 8.4.27 and both databases report MariaDB 10.11.19.
 The PHP-FPM web runtime is also 8.4.27. Before app startup it reports a 2048M
 memory limit, 3600-second execution limit and file-backed sessions. OPcache
-directives are unavailable. Startup then removes memory/time limits; route budgets
-remain pending request measurements. This supersedes historical PHP/MySQL assumptions.
+directives are unavailable. The legacy startup removes memory/time limits; the candidate now applies finite
+limits only to measured viewer routes. This supersedes historical PHP/MySQL assumptions.
 Both sites use YouPlay. Production transcription is off; staging transcription is
 on, so test execution must prevent unintended external processing. The SSH user's
 crontab was not available through `crontab -l`; hosting-managed schedules remain
@@ -63,8 +63,10 @@ Private, verified archives now preserve both Git directories, tracked working
 files and local configuration outside the webroots. Normalized token comparisons
 show staging's only changed public function is PT_GetMedia. A private three-way
 merge of that change with candidate 8efb5ac is clean and lints; the diff remains
-on the server. Production's function file matches its public HEAD. No application
-deployment or rebase recovery has occurred.
+on the server. Production's function file matches its public HEAD. Temporary staging releases have been rolled back successfully. A private copy of
+the production checkout has completed recovery and candidate checkout without changing
+the served production checkout. Three local helper directories are preserved outside
+the webroot during recovery; no private source or configuration enters GitHub logs.
 
 Staging is on main at `bf4db4811b64b721ddebedfc1081686f2a6e36df`, with one local
 change in `assets/includes/functions_one.php`. Preserve and understand it before
@@ -111,8 +113,9 @@ These are component measurements, not an HTTP load test or a capacity claim.
 The production-version CLI also passed all existing suites and 46 read-helper
 assertions. Card tests compare actual template HTML for both themes and guest/
 signed-in fixtures at 10 and 20 items. Staging card/search comparisons passed in run 46145729825. Rife, PectaSol, IV,
-B12 and 5-FU preserve the first 20 result IDs. 5-FU has no current staging result,
-so its positive-match fixture still needs a disposable data test.
+B12 and 5-FU preserve the first 20 result IDs. 5-FU has no current staging result; disposable database fixtures additionally
+exercise positive short-term matches, entity-encoded punctuation, literal wildcards
+and visibility rules.
 
 The candidate also includes 30-second visible polling with one request in flight,
 error backoff and hidden-tab pause for both transports. Messages remain supported;
@@ -128,8 +131,81 @@ have only a primary key, and a recent view-ranking plan estimates 354,259 rows
 through the existing (video_id,time) index. No index migration has been selected
 or applied. Index-build timing, write/lock impact and recovery remain unmeasured.
 
+## Complete-request staging results
+
+Candidate `75fa904` in run `46148865130` and candidate `2f5b764` in run
+`46150152075` completed sequential guest requests, two/five-concurrent-request
+bursts and rollback. Instrumented query counts include the two new session SQL
+budget statements. The baseline has no such budget statements.
+
+| Route | Baseline median queries | Candidate median queries |
+| --- | ---: | ---: |
+| Homepage | 305 | 129 |
+| Search | 139 | 24 |
+| Watch | 102 | 43 |
+| Suggestions | 101 | 15 |
+
+Every sampled route peaked at 8 MiB of PHP memory. Candidate `2f5b764` served the
+five-concurrent-request burst with zero errors across 20 requests and 185 ms p95.
+The earlier burst had zero errors and 170 ms p95. These short, same-host staging
+checks do not establish sustained public capacity, CDN transfer performance or a
+maximum concurrent-user count. Signed-in live HTTP and hosting worker-pool limits
+have not been verified; signed-in template/visibility fixtures pass.
+
+The browser review caught restrictive permissions on newly checked-out JavaScript.
+A staging-only repair restored the three public assets to 0644. The rehearsal and
+release process now use a public-readable umask for source checkout, keep private
+journals at 0700/0600, and request each script directly during smoke checks.
+After repair, desktop autocomplete, numbered search pages, lazy images, AJAX watch
+and channel navigation, transcripts, playlist metadata and video playback passed.
+The browser showed no horizontal overflow on the reviewed desktop pages. No
+separate mobile browser viewport or signed-in account was exercised.
+
+## Bounded collections and runtime
+
+- Playlist and Watch Later sidebars load at most 50 items, retain the current
+  position/count and supply the next playable neighbor across boundaries. Browsing
+  another window retains the current video's autoplay target. Reordering changes
+  only the submitted owned membership slots in a transaction; other items remain.
+- Channel playlist pages show 20 playlists and obtain a count/first video without
+  hydrating every member. Private, unapproved and blocked content remains scoped.
+- Initial watch comments stay at five plus at most one focused permalink target.
+  Replies show five at a time with ordinary previous/next links, including direct
+  reply permalinks. Reply owners/votes are batched; blocked replies are excluded.
+- Disposable connection-local MariaDB fixtures cover list boundaries, reorder
+  ownership/duplicates, unavailable videos, reply paging and cross-video links.
+  They do not alter application records. Browser watch requests can record ordinary
+  views, so the HTTP rehearsal is not described as database read-only.
+- Suggestions receive 64 MiB / 8 seconds and a three-second SQL budget. Measured
+  home/watch/search/videos/timeline routes receive 128 MiB / 20 seconds and a
+  five-second SQL budget. CLI, uploads, payments and job endpoints retain their
+  separate behavior. PHP execution limits are not a substitute for FPM pool limits.
+- Notification activity credit now uses bounded elapsed visible polling time so
+  reducing polling frequency does not arbitrarily reduce the activity counter.
+
+## Release evidence and remaining follow-through
+
+`46150152019` recovered a private copy of the exact production checkout, preserved
+its three helper directories, fast-forwarded to the candidate, and restored the
+original archive successfully. It did not modify the served checkout or database.
+The deployment runner requires matching source/release SHAs, a known branch/state,
+a private verified archive, passing candidate suites/migrations and successful HTTP
+smokes. Failures stop the release; rollback restores the original tracked checkout
+and Git metadata, including a pre-existing interrupted operation when necessary.
+Runtime cache invalidation is scoped to cached scripts within the deployed site.
+
+No schema/index migration is selected for this release. The CLI runner loads server
+`config.php`, uses a migration lock and checksum ledger when migrations exist, and
+requires resumable, backward-compatible migrations. Empty plans do not create tables.
+
+Cross-request page caching, a ranking summary table, a new search engine and new
+production indexes remain conditional improvements, not unimplemented requirements
+for the measured query reductions. Hosting-level worker isolation and sustained
+load sizing require provider settings and a representative traffic target.
+
 ## Next step
 
-Run the candidate's read-only card/search comparisons, preserve checkout state
-privately, and establish a safe staging release and rollback path. Production is
-still unchanged and remains in its interrupted rebase.
+Finish release-runner validation, merge the tested branch to main for staging,
+then promote that exact tested revision to super. Verify production HTTP/assets,
+known-rebase recovery and the independent publication workflow before closing the
+workstream. Retain the browser publication fallback until scheduled runs are observed.

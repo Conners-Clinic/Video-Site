@@ -16,6 +16,7 @@ try {
     define('IS_LOGGED', true);
     require dirname(__DIR__) . '/assets/includes/traffic_lists.php';
     require dirname(__DIR__) . '/assets/includes/traffic_comments.php';
+    require dirname(__DIR__) . '/assets/includes/traffic_search.php';
     function PT_VideoCardColumns() { return array('id', 'user_id', 'video_id', 'title'); }
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT); $phase = 'connection';
     $connection = mysqli_init(); $connection->options(MYSQLI_OPT_CONNECT_TIMEOUT, 5);
@@ -25,7 +26,7 @@ try {
     $db = new MysqliDb($connection); $db->returnType = 'object';
     $pt = (object) array('user' => (object) array('id' => 1), 'blocked_array' => array(9));
     $phase = 'temporary_fixture';
-    $connection->query('CREATE TEMPORARY TABLE ' . T_VIDEOS . ' (id INT PRIMARY KEY, user_id INT, video_id VARCHAR(20), title VARCHAR(60), privacy INT DEFAULT 0, approved INT DEFAULT 1) ENGINE=InnoDB');
+    $connection->query('CREATE TEMPORARY TABLE ' . T_VIDEOS . ' (id INT PRIMARY KEY, user_id INT, video_id VARCHAR(20), title VARCHAR(60), privacy INT DEFAULT 0, approved INT DEFAULT 1, description TEXT, tags TEXT, is_short INT DEFAULT 0, category_id INT DEFAULT 1, time BIGINT DEFAULT 0) ENGINE=InnoDB');
     $connection->query('CREATE TEMPORARY TABLE ' . T_LISTS . ' (id INT PRIMARY KEY, user_id INT, list_id VARCHAR(20)) ENGINE=InnoDB');
     foreach (array(T_PLAYLISTS, T_WLATER) as $table) { $connection->query('CREATE TEMPORARY TABLE ' . $table . ' (id INT PRIMARY KEY, user_id INT, video_id INT, list_id VARCHAR(20)) ENGINE=InnoDB'); }
     $connection->query('CREATE TEMPORARY TABLE ' . T_COMMENTS . ' (id INT PRIMARY KEY, user_id INT, video_id INT, pinned INT DEFAULT 0) ENGINE=InnoDB');
@@ -77,8 +78,27 @@ try {
     $_GET = array('rl' => 14); $check(PT_WatchCommentFocus(1) === null);
     $_GET = array('cl' => 3); $check(PT_WatchCommentFocus(1) === null);
     $_GET = array('rl' => 13); $check(PT_WatchCommentFocus(1) === null);
+    $phase = 'search_fixtures';
+    $statement = $connection->prepare('UPDATE ' . T_VIDEOS . " SET title=?, description='', tags='' WHERE id=?");
+    foreach (array(1 => '5-FU support', 2 => '5-FU private', 3 => '5-FU unlisted', 4 => '5-FU pending', 5 => '5-FU blocked',
+        6 => 'IV education', 7 => 'B12 education', 8 => 'PectaSol education', 9 => "O'Brien", 10 => 'O&#039;Brien',
+        11 => '100% match', 12 => '100x match', 13 => 'a_b', 14 => 'axb') as $id => $title) {
+        $statement->bind_param('si', $title, $id); $statement->execute();
+    }
+    $statement->close();
+    $connection->query('UPDATE ' . T_VIDEOS . ' SET privacy=1 WHERE id=2');
+    $connection->query('UPDATE ' . T_VIDEOS . ' SET privacy=2 WHERE id=3');
+    $connection->query('UPDATE ' . T_VIDEOS . ' SET approved=0 WHERE id=4');
+    $connection->query('UPDATE ' . T_VIDEOS . ' SET user_id=9 WHERE id=5');
+    $options = array('blocked' => array(9));
+    $check(PT_SearchVideoCount($db, '5-FU', $options) === 1);
+    $check(count(PT_SearchVideoRows($db, '5-FU', $options + array('suggestions' => true))) === 1);
+    $check(PT_SearchVideoCount($db, '5-FU', $options + array('admin' => true)) === 2);
+    foreach (array('IV', 'B12', 'PectaSol', '100%', 'a_b') as $term) { $check(PT_SearchVideoCount($db, $term, $options) === 1); }
+    $check(PT_SearchVideoCount($db, "O'Brien", $options) === 2);
+    $check(count(PT_SearchVideoRows($db, '5-FU', $options + array('after_id' => 1))) === 0);
     $connection->close();
-    echo 'TRAFFIC_LIST_CHECK_JSON=' . json_encode(array('status' => 'passed', 'checks' => $checks, 'application_records_changed' => false, 'fixture_kind' => 'connection_local_temporary_tables')) . "\n";
+    echo 'TRAFFIC_LIST_CHECK_JSON=' . json_encode(array('status' => 'passed', 'checks' => $checks, 'search_fixture_checks_passed' => true, 'application_records_changed' => false, 'fixture_kind' => 'connection_local_temporary_tables')) . "\n";
 } catch (Throwable $error) {
     echo 'TRAFFIC_LIST_CHECK_JSON=' . json_encode(array('status' => 'failed', 'phase' => $phase, 'checks_completed' => $checks ?? 0, 'error_code' => (int) $error->getCode())) . "\n"; exit(1);
 }
