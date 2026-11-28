@@ -2,7 +2,39 @@
 
 Owner approved starting the reviewed implementation on November 28, 2026.
 Source base: `9c7322893483109cc27cbd48f458d0a6b8afb13c`.
-Work branch: `codex/traffic-readiness-20261128`; review: PR #14.
+Implementation: [PR #14](https://github.com/Conners-Clinic/Video-Site/pull/14), merged and deployed.
+Publisher release check: [PR #15](https://github.com/Conners-Clinic/Video-Site/pull/15).
+
+## Release status
+
+The application changes first shipped at `e21bf933b2f8d1e9d4bd1a04a23a151cb13c34c7`.
+Production now runs `ac3ed4c610def9308421836a1738d6b0bfda44ec`, adding the publisher
+release check without changing application code. The follow-up staging release
+[46151569074](https://github.com/Conners-Clinic/Video-Site/actions/runs/46151569074)
+and production release [46151672761](https://github.com/Conners-Clinic/Video-Site/actions/runs/46151672761)
+also passed. Documentation-only follow-up commits may put main ahead of super;
+the application code is the same on both branches.
+Staging deployment [46150774218](https://github.com/Conners-Clinic/Video-Site/actions/runs/46150774218)
+and production deployment [46150906217](https://github.com/Conners-Clinic/Video-Site/actions/runs/46150906217)
+succeeded. Both passed migrations, PHP/browser-controller suites, six HTTP/asset
+smokes and a PHP-FPM runtime check. No schema/index changes were necessary.
+Production recovery preserved all three local helper directories; staging retained
+its private media customization. Both configuration hashes stayed unchanged.
+
+Production browser checks passed: ten autocomplete suggestions, numbered search
+page two, 2 eager/18 lazy result images, AJAX navigation to a watch page, both CTA
+sections, transcript tab, loaded caption track and actual video playback. The player
+advanced roughly ten seconds with readyState 4 and no media error, then was paused.
+One browser error appeared in a tag-manager call stack (`scrollLeft` on null); it
+did not interrupt these flows and was not traced to a new browser controller.
+
+Independent production publisher run
+[46151743305](https://github.com/Conners-Clinic/Video-Site/actions/runs/46151743305)
+succeeded after the production release, reporting `status: ok`, `published: 0`,
+`lock_busy: false`. No videos were due. This verifies the live CLI/SSH/database
+execution path, while disposable fixtures verify actual publication transitions.
+The five-minute timer is registered; timer-event delivery has not yet been observed.
+The browser fallback remains enabled pending a dependable scheduled run history.
 
 ## Scope and release conditions
 
@@ -20,44 +52,50 @@ No new paid service or bulk transcription is part of this work.
 - [x] Verify SSH and database connectivity using existing deployment secrets.
 - [x] Verify staging and production have distinct connected database identities.
 - [x] Inventory current server revisions, checkout state, and CLI/database versions.
-- [ ] Preserve and reconcile deployment checkout differences without discarding work.
+- [x] Preserve and reconcile deployment checkout differences without discarding work; production recovery and staging media preservation succeeded.
 - [x] Establish effective web runtime, request/query baseline and staging fixture isolation; hosting scheduler/pool settings remain outside observed access.
 - [x] Implement fail-fast exact-revision deployment, config-only migration runner, private backups and rollback; exercise staging rollback and recovery on a private production copy.
 - [x] Batch language/category metadata and reuse request-local reads (staging component comparison passed).
 - [x] Introduce bounded card projections and batch displayed related/personal fields (component and template parity tests).
-- [x] Debounce and bound search; preserve channels, numbered pages and relevant terms (fixtures pass; browser rehearsal pending).
+- [x] Debounce and bound search; preserve channels, numbered pages and relevant terms (fixtures and staging/production browser checks pass).
 - [x] Reuse transcript records and remove theme-specific unused homepage work.
 - [x] Cache public metadata/owner fields within a request; retain current access checks. Defer cross-request/full-page caching after measured staging improvements.
 - [x] Bound playlist windows, Watch Later, channel playlist lists, comment permalinks and replies with navigation continuity.
-- [ ] Control both notification transports and verify unattended publication before scheduler cutover.
+- [x] Control both notification transports, including message handling, hidden-tab pause and backoff.
+- [x] Verify production unattended publication through the same CLI/serialized job; retain browser fallback while the five-minute timer builds a run history.
 - [x] Apply measured viewer-route budgets and release the autocomplete session lock after security checks; preserve separate upload/job behavior. Hosting worker-pool settings remain unverified.
 - [x] Review index plans; defer production index builds without representative build/lock evidence. Add a guarded migration entrypoint for future approved changes.
 - [x] Add native thumbnail loading hints and verify search-to-watch-to-channel AJAX navigation, transcripts and playback in staging.
 - [x] Run candidate regression, disposable MariaDB fixtures, guest browser checks and bounded staging concurrency bursts.
-- [ ] Deploy the tested revision, verify production and document measured results/limits.
+- [x] Deploy the tested application revision, verify production HTTP/assets/browser flows and document measured results/limits.
 
-## Verified environment and current deployment blockers
+## Environment and resolved deployment differences
 
 Read-only workflow runs `46140848325` and `46141128851` succeeded. The SSH account
 can read site configuration, connect to both databases, and has schema-level
 SELECT/INSERT/UPDATE/DELETE/CREATE/ALTER/INDEX/DROP grants. It can write the site
-directories. No database mutations or application deployments were performed.
+directories. Those initial access preflights did not mutate application data or deploy code.
 
 The observed CLI is PHP 8.4.27 and both databases report MariaDB 10.11.19.
 The PHP-FPM web runtime is also 8.4.27. Before app startup it reports a 2048M
-memory limit, 3600-second execution limit and file-backed sessions. OPcache
-directives are unavailable. The legacy startup removes memory/time limits; the candidate now applies finite
+memory limit, 3600-second execution limit and file-backed sessions. The release-time
+web probe reports OPcache disabled. Legacy startup removes memory/time limits; the
+deployed changes now apply finite
 limits only to measured viewer routes. This supersedes historical PHP/MySQL assumptions.
 Both sites use YouPlay. Production transcription is off; staging transcription is
 on, so test execution must prevent unintended external processing. The SSH user's
 crontab was not available through `crontab -l`; hosting-managed schedules remain
 unverified.
 
-Production is detached at `1ac6695dc69fc7d72f52aa5929f621ec73623482` in an
+Before this release, production was detached at `1ac6695dc69fc7d72f52aa5929f621ec73623482` in an
 unfinished rebase of `07ec37f96dd0c3f9dc0fca256a9d849b37be0a46` onto that commit.
-The index reports 2,357 added files, three AU conflicts and one AA conflict.
+The index reported 2,357 added files, three AU conflicts and one AA conflict.
 Both the original snapshot and destination commit are ancestors of the reconciled
-source base. This supports further comparison, not automatic deletion or reset.
+source base. Comparison against public Git blobs accounted for all tracked differences: the known
+media .htaccess conflict was reproducible, and three tracked symlink locations
+contained local helper directories. The guarded release preserved those directories
+privately, archived the exact original Git/working state, aborted only the proven
+rebase, and fast-forwarded to the release. Production is no longer mid-rebase.
 
 Private, verified archives now preserve both Git directories, tracked working
 files and local configuration outside the webroots. Normalized token comparisons
@@ -68,10 +106,10 @@ the production checkout has completed recovery and candidate checkout without ch
 the served production checkout. Three local helper directories are preserved outside
 the webroot during recovery; no private source or configuration enters GitHub logs.
 
-Staging is on main at `bf4db4811b64b721ddebedfc1081686f2a6e36df`, with one local
-change in `assets/includes/functions_one.php`. Preserve and understand it before
-deploying. The successful preflight found a separate database, not proof that all
-external services or jobs are isolated.
+Staging originally ran main at `bf4db4811b64b721ddebedfc1081686f2a6e36df`, with one local
+change in `assets/includes/functions_one.php`. The deployed three-way merge retains
+that customization. A separate staging database does not prove external services or
+jobs are isolated; rehearsal/fixture tooling prevents unintended processing.
 
 ## Validation record
 
@@ -82,7 +120,7 @@ external services or jobs are isolated.
 - Live preflight only reports allowlisted diagnostics; credentials, grants text,
   raw database contents, local patches and scheduler command lines stay private.
 
-## Implemented candidate changes
+## Implemented application changes
 
 - Language metadata is one query rather than 46 on the staging dataset. Categories
   use two queries rather than 15. The caption helper reuses its loaded transcript
@@ -124,7 +162,10 @@ pending-payment and activity work. The browser publication fallback remains unti
 the independent schedule is observed live. A new CLI publisher uses a DB lock,
 100-row batches, approval checks and clears completed schedule timestamps. Eight
 MariaDB checks passed using connection-local temporary fixtures, with no app
-records changed and no browser visit. The five-minute workflow is not active yet.
+records changed and no browser visit. The five-minute workflow is now on the default
+branch, and its release-triggered production invocation passed. PR #15 also
+runs that same serialized job after successful production Deploy workflows. Failed
+and staging deployments cannot trigger it. Browser fallback removal is deferred.
 
 Index inventory found existing indexes on most investigated paths. Reply lookups
 have only a primary key, and a recent view-ranking plan estimates 354,259 rows
@@ -183,7 +224,7 @@ separate mobile browser viewport or signed-in account was exercised.
 - Notification activity credit now uses bounded elapsed visible polling time so
   reducing polling frequency does not arbitrarily reduce the activity counter.
 
-## Release evidence and remaining follow-through
+## Release safeguards and operational follow-through
 
 `46150152019` recovered a private copy of the exact production checkout, preserved
 its three helper directories, fast-forwarded to the candidate, and restored the
@@ -205,7 +246,8 @@ load sizing require provider settings and a representative traffic target.
 
 ## Next step
 
-Finish release-runner validation, merge the tested branch to main for staging,
-then promote that exact tested revision to super. Verify production HTTP/assets,
-known-rebase recovery and the independent publication workflow before closing the
-workstream. Retain the browser publication fallback until scheduled runs are observed.
+The reviewed implementation is deployed and its immediate checks passed. Subsequent
+capacity work should begin with provider FPM pool/worker settings and a representative traffic
+target, then a controlled sustained test. Preserve the existing browser fallback
+until the timer has a dependable run history. Live signed-in and a dedicated mobile
+viewport review remain additional validation, not results established by these tests.
