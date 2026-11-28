@@ -1,0 +1,84 @@
+name: Traffic read regression checks
+
+on:
+  push:
+    branches: [codex/traffic-readiness-20261128]
+    paths:
+      - '.github/workflows/traffic-read-check.yml'
+      - 'assets/includes/traffic_reads.php'
+      - 'assets/includes/functions_one.php'
+      - 'assets/includes/app_start.php'
+      - 'assets/includes/functions_transcribe.php'
+      - 'tests/traffic-reads.php'
+      - 'tools/traffic-db-read-check.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-traffic-staging-read-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: PHP regression and read-only staging comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Test isolated candidate with existing SSH connection
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 20s
+          command_timeout: 6m
+          script: |
+            set -eu
+            umask 077
+            target='${{ github.sha }}'
+            case "$target" in *[!a-f0-9]*|'') echo 'Invalid candidate revision'; exit 1;; esac
+            [ "${#target}" -eq 40 ]
+            production='/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            staging_legacy='/home/admin/web/test-videos.connersclinic.com/public_html'
+            staging_current="$(dirname "$production")/test-videos.connersclinic.com"
+            if [ -d "$staging_legacy" ] && [ ! -d "$staging_current" ]; then
+              staging="$staging_legacy"
+            elif [ -d "$staging_current" ] && [ ! -d "$staging_legacy" ]; then
+              staging="$staging_current"
+            else
+              echo 'Staging location is absent or ambiguous'; exit 1
+            fi
+            private_base="$(dirname "$production")/.codex-video-traffic"
+            mkdir -p "$private_base"
+            chmod 700 "$private_base"
+            candidate=$(mktemp -d "$private_base/read-check.XXXXXX")
+            chmod 700 "$candidate"
+            git init --quiet "$candidate"
+            if ! git -C "$candidate" fetch --quiet --depth=1 'https://github.com/Conners-Clinic/Video-Site.git' "$target" >"$candidate/checkout.log" 2>&1; then
+              echo 'Candidate source fetch failed; details retained privately'; exit 1
+            fi
+            if ! git -C "$candidate" -c advice.detachedHead=false checkout --quiet --detach "$target" >>"$candidate/checkout.log" 2>&1; then
+              echo 'Candidate checkout failed; details retained privately'; exit 1
+            fi
+            [ "$(git -C "$candidate" rev-parse HEAD)" = "$target" ]
+            cd "$candidate"
+            printf 'Candidate revision: %s\n' "$target"
+            for source in assets/includes/traffic_reads.php assets/includes/functions_one.php assets/includes/app_start.php assets/includes/functions_transcribe.php tools/traffic-db-read-check.php; do
+              if ! php -l "$source" >lint.log 2>&1; then
+                printf 'PHP lint failed: %s\n' "$source"; exit 1
+              fi
+            done
+            for suite in tests/run.php tests/watch-library.php tests/sidebar-menu.php tests/export_inventory_check.php tests/traffic-reads.php; do
+              if ! php "$suite" >test.log 2>&1; then
+                printf 'Regression failed: %s; details retained privately\n' "$suite"; exit 1
+              fi
+              printf 'PASS %s\n' "$suite"
+            done
+            if ! php tests/sidebar-menu.php --guest >test.log 2>&1; then
+              echo 'Guest upload-menu regression failed; details retained privately'; exit 1
+            fi
+            echo 'PASS tests/sidebar-menu.php --guest'
+            php tools/traffic-db-read-check.php --site-root="$staging"
