@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+  # Exercise the same publisher after a successful production release, even
+  # when delivery of the next scheduled event is delayed.
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+    branches: [super]
 
 permissions:
   contents: read
@@ -14,6 +20,10 @@ concurrency:
 
 jobs:
   publish:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'super')
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
