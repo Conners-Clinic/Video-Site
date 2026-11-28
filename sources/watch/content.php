@@ -265,98 +265,54 @@ $video_index    = 0;
 $pt->list_owner = false;
 $playlist_subscribe = '';
 
-if ($pt->is_wl === true && IS_LOGGED === true) {
-    $user_id        = $pt->user->id;
-    $videos         = $db->where('user_id', $user_id)->where('user_id',$pt->blocked_array , 'NOT IN')->get(T_WLATER,null,'video_id');
-    $video_list     = array();
-
-    foreach ($videos as $vid) {
-        $video_list[] = $vid->video_id;
-    }
-
-    $wl_list_videos   = $db->where('id', array_values($video_list), 'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->orderBy('id','asc',array_values($video_list))->get(T_VIDEOS);
-    $vid_number       = 1;
-    foreach ($wl_list_videos as $key => $pl_vid) {
-        $pl_vid         = PT_GetVideoByID($pl_vid, 0, 0, 0);
-        $pl_vid->url    = PT_Link('watch/' . PT_Slug($pl_vid->title, $pl_vid->video_id) . "?list=wl");
-        $list_sidebar .= PT_LoadPage('watch/wl-list', array(
-            'TITLE' => $pl_vid->title,
-            'URL' => $pl_vid->url,
-            'VID_ID' => $pl_vid->id,
-            'ID' => $pl_vid->video_id,
-            'THUMBNAIL' => $pl_vid->thumbnail,
-            'VID_NUMBER' => ($pl_vid->video_id == $id) ? "<i class='fa fa-circle'></i>" : $vid_number,
-            'LIST_ID' => 'wl',
-            'VIDEO_ID_' => PT_Slug($pl_vid->title, $pl_vid->video_id)
-        ));
-
-        if ($pl_vid->video_id == $id) {
-            $video_index = $vid_number;
+$pt->playlist_next_url = '';
+$pt->playlist_after_window_url = '';
+$pt->playlist_offset = 0;
+if (($pt->is_wl && IS_LOGGED) || $pt->is_list) {
+    $playlist_key = $pt->is_wl ? 'wl' : $list_id;
+    if ($pt->is_list) {
+        $pt->list_data = $db->where('list_id', $list_id)->where('user_id', $pt->blocked_array, 'NOT IN')->getOne(T_LISTS);
+        $pt->list_owner = $pt->list_data && IS_LOGGED && $pt->list_data->user_id == $pt->user->id;
+        if (!$pt->list_data || ($pt->list_data->privacy != 1 && !$pt->list_owner)) {
+            header('Location: ' . PT_Link('watch/' . $id));
+            exit();
         }
-        $vid_number++;
-        $list_count++;
+        $pt->list_name = $pt->list_data->name;
+        $list_user_data = PT_VideoCardOwners($db, array($pt->list_data->user_id));
+        $list_user_name = $list_user_data[$pt->list_data->user_id]->name ?? '';
+        if ($pt->config->playlist_subscribe == 'on' && canUseFeature($pt->list_data->user_id, 'who_can_playlist')) {
+            $playlist_subscribe = PT_GetSubscribePlaylistButton($pt->list_data->user_id, $list_id);
+        }
     }
-}
-
-else if($pt->is_list === true) {
-
-    $pt->list_data  = $db->where("list_id", $list_id)->where('user_id',$pt->blocked_array , 'NOT IN')->getOne(T_LISTS);
-    if ($pt->list_data->privacy == '1' && $pt->config->playlist_subscribe == 'on' && canUseFeature($pt->list_data->user_id,'who_can_playlist')) {
-        $playlist_subscribe = PT_GetSubscribePlaylistButton($pt->list_data->user_id,$list_id);
-    }
-    $pt->list_name  = $pt->list_data->name;
-    $videos         = $db->where('list_id', $list_id)->where('user_id',$pt->blocked_array , 'NOT IN')->get(T_PLAYLISTS, 300, 'video_id');
-    $video_list     = array();
-    $list_user_data = PT_UserData($pt->list_data->user_id);
-
-    if (!empty($list_user_data)) {
-        $list_user_name = $list_user_data->name;
-    }
-
-    if (IS_LOGGED === true && ($pt->list_data->user_id == $pt->user->id)) {
-        $pt->list_owner = true;
-    }
-
-    foreach ($videos as $vid) {
-        $video_list[] = $vid->video_id;
-    }
-
-    $play_list_videos = $db->where('id', array_values($video_list), 'IN')->where('user_id',$pt->blocked_array , 'NOT IN')->orderBy('id','asc',array_values($video_list))->get(T_VIDEOS);
-    $vid_number       = 1;
-    foreach ($play_list_videos as $key => $pl_vid) {
-        $pl_vid         = PT_GetVideoByID($pl_vid, 0, 0, 0);
-        $pl_vid->url    = PT_Link('watch/' . PT_Slug($pl_vid->title, $pl_vid->video_id) . "/list/$list_id");
-        $list_sidebar .= PT_LoadPage('watch/video-list', array(
-            'TITLE' => $pl_vid->title,
-            'URL' => $pl_vid->url,
-            'LIST_ID' => $list_id,
-            'VID_ID' => $pl_vid->id,
-            'ID' => $pl_vid->video_id,
-            'THUMBNAIL' => $pl_vid->thumbnail,
-            'VID_NUMBER' => ($pl_vid->video_id == $id) ? "<i class='fa fa-circle'></i>" : $vid_number,
+    $window = PT_ListWindow($pt->is_wl, $list_id, IS_LOGGED ? $pt->user->id : 0, $get_video->id, $_GET['list_page'] ?? null);
+    $list_count = $window['total'];
+    $video_index = $window['position'];
+    $pt->playlist_offset = $window['offset'];
+    $list_url = static function ($video) use ($playlist_key) {
+        return PT_Link('watch/' . PT_Slug($video->title, $video->video_id) . '?list=' . rawurlencode($playlist_key));
+    };
+    if ($window['next']) { $pt->playlist_next_url = $list_url($window['next']); }
+    if ($window['after_window']) { $pt->playlist_after_window_url = $list_url($window['after_window']); }
+    foreach (PT_VideoCards($window['rows']) as $index => $pl_vid) {
+        $list_sidebar .= PT_LoadPage($pt->is_wl ? 'watch/wl-list' : 'watch/video-list', array(
+            'TITLE' => $pl_vid->title, 'URL' => $list_url($pl_vid), 'LIST_ID' => $playlist_key,
+            'VID_ID' => $pl_vid->id, 'ID' => $pl_vid->video_id, 'THUMBNAIL' => $pl_vid->thumbnail,
+            'VID_NUMBER' => $pl_vid->id == $get_video->id ? "<i class='fa fa-circle'></i>" : $window['offset'] + $index + 1,
             'VIDEO_ID_' => PT_Slug($pl_vid->title, $pl_vid->video_id),
-            'USER_NAME' => $pl_vid->owner->name,
-            'DURATION' => $pl_vid->duration,
-        ));
-        if ($pl_vid->video_id == $id) {
-            $video_index = $vid_number;
-        }
-        $vid_number++;
-        $list_count++;
+            'USER_NAME' => $pl_vid->owner->name ?? '', 'DURATION' => $pl_vid->duration));
     }
+    $list_sidebar .= PT_ListNavigation($list_url($get_video), $window['page'], $window['pages']);
 }
-
 
 $pt->have_video_sidebar = true;
 if (!empty($next_up_videos) && !empty($next_up_videos[0])) {
     array_unshift($related_videos , $next_up_videos[0]);
 }
-foreach ($related_videos as $key => $related_video) {
+foreach (PT_VideoCards($related_videos) as $key => $related_video) {
     if ($sidebar_videos_shown >= $watch_sidebar_initial_limit) {
         break;
     }
     if (empty($next_up_videos) || (!empty($next_up_videos) && !empty($next_up_videos[0]) && $next_up_videos[0]->id != $related_video->id)) {
-        $related_video  = PT_GetVideoByID($related_video, 0, 0, 0);
         $video_sidebar .= PT_LoadPage('watch/video-sidebar', array(
             'ID' => $related_video->id,
             'TITLE' => $related_video->title,
@@ -389,11 +345,16 @@ $db->orderBy('id', 'DESC');
 $pt->config->comments_default_num = 5;
 $comments_limit     = $pt->config->comments_default_num;
 
-if (!empty($_GET['cl']) || !empty($_GET['rl'])) {
-    $comments_limit = null;
+$get_video_comments = $db->get(T_COMMENTS, $comments_limit);
+$comment_focus = PT_WatchCommentFocus($get_video->id);
+if ($comment_focus && $comment_focus->pinned != 1) {
+    $loaded_comment_ids = array_map(static function ($row) { return (int) $row->id; }, $get_video_comments);
+    if (!in_array((int) $comment_focus->id, $loaded_comment_ids, true)) {
+        // Keep latest comments last so the existing older-comments cursor stays correct.
+        array_unshift($get_video_comments, $comment_focus);
+    }
 }
 
-$get_video_comments = $db->get(T_COMMENTS,$comments_limit);
 if (!empty($get_video_comments)) {
     $comments = '';
     foreach ($get_video_comments as $key => $comment) {
@@ -402,62 +363,11 @@ if (!empty($get_video_comments)) {
         $pt->is_comment_owner = false;
         $replies              = "";
         $pt->pin              = false;
-        $comment_replies      = $db->where('comment_id', $comment->id)->where('user_id',$pt->blocked_array , 'NOT IN')->get(T_COMM_REPLIES);
         $is_liked_comment     = '';
         $is_comment_disliked  = '';
         $comment_user_data    = PT_UserData($comment->user_id);
         $pt->is_verified      = ($comment_user_data->verified == 1) ? true : false;
-        foreach ($comment_replies as $reply) {
-
-            $pt->is_reply_owner = false;
-            $pt->is_ro_verified = false;
-            $reply_user_data    = PT_UserData($reply->user_id);
-            $is_liked_reply     = '';
-            $is_disliked_reply  = '';
-            if (IS_LOGGED == true) {
-                $is_reply_owner = $db->where('id', $reply->id)->where('user_id', $user->id)->getValue(T_COMM_REPLIES, 'count(*)');
-                if ($is_reply_owner || $pt->video_owner) {
-                    $pt->is_reply_owner = true;
-                }
-
-                //Check is this reply  voted by logged-in user
-                $db->where('reply_id', $reply->id);
-                $db->where('user_id', $user->id);
-                $db->where('type', 1);
-                $is_liked_reply    = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-
-                $db->where('reply_id', $reply->id);
-                $db->where('user_id', $user->id);
-                $db->where('type', 2);
-                $is_disliked_reply = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-            }
-
-            if ($reply_user_data->verified == 1) {
-                $pt->is_ro_verified = true;
-            }
-
-            //Get related to reply likes
-            $db->where('reply_id', $reply->id);
-            $db->where('type', 1);
-            $reply_likes    = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-
-            $db->where('reply_id', $reply->id);
-            $db->where('type', 2);
-            $reply_dislikes = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-            $reply->text = PT_Duration($reply->text);
-
-            $replies    .= PT_LoadPage('watch/replies', array(
-                'ID' => $reply->id,
-                'TEXT' => PT_Markup($reply->text),
-                'TIME' => PT_Time_Elapsed_String($reply->time),
-                'USER_DATA' => $reply_user_data,
-                'COMM_ID' => $comment->id,
-                'LIKES'  => $reply_likes,
-                'DIS_LIKES' => $reply_dislikes,
-                'LIKED' => $is_liked_reply,
-                'DIS_LIKED' => $is_disliked_reply,
-            ));
-        }
+        $replies = PT_RenderWatchReplies($comment);
 
         if (IS_LOGGED == true) {
             $is_liked_comment = $db->where('comment_id', $comment->id)->where('user_id', $user->id)->getValue(T_COMMENTS_LIKES, 'count(*)');
@@ -504,7 +414,7 @@ if (!empty($get_video_comments)) {
 $db->where('video_id', $get_video->id);
 $db->where('pinned', '1');
 $pinned_comments     = "";
-$pinned_comm_data    = $db->getOne(T_COMMENTS);
+$pinned_comm_data    = $db->where('user_id', $pt->blocked_array, 'NOT IN')->getOne(T_COMMENTS);
 
 if (!empty($pinned_comm_data)) {
     $pinned_comments = pt_comm_object_data($pinned_comm_data,true);

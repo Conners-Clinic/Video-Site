@@ -29,7 +29,7 @@
 	</div>
 	<form class="navbar-form search-header" role="search" action="{{LINK search}}" method="GET">
 		<div class="form-group">
-			<input type="text" class="form-control" id="search-bar" name="keyword" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}">
+			<input type="text" class="form-control" id="search-bar" name="keyword" minlength="2" maxlength="200" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}">
 			<button type="submit" class="btn btn-main"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M23.707 22.293l-5.969-5.969a10.016 10.016 0 10-1.414 1.414l5.969 5.969a1 1 0 001.414-1.414zM10 18a8 8 0 118-8 8.009 8.009 0 01-8 8z"/></svg></button>			
 			<?php
 			if (!empty($_GET['is_channel'])) {
@@ -140,7 +140,7 @@
     <div class="container-fluid">
 		<form class="search-header-mobile" role="search" action="{{LINK search}}" method="GET">
 			<div class="form-group">
-				<input type="text" class="form-control" id="search-bar-mobile" name="keyword" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}" autofocus>
+				<input type="text" class="form-control" id="search-bar-mobile" name="keyword" minlength="2" maxlength="200" placeholder="{{LANG search_keyword}}" autocomplete="off" value="{{SEARCH_KEYWORD}}" autofocus>
 				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
 			</div>
 			<div class="search-dropdown hidden"></div>
@@ -150,44 +150,43 @@
 
 <?php if (IS_LOGGED): ?>
 <script>
-	jQuery(document).ready(function($) {
-		pt_get_notifications({type:'new'});
-		UpdateInfo();
-		
-		$("#get-notifications").click(function(event) {
-			if ($('#notifications').css('display') == 'none') {
-				var notfi_cont = $("ul.notfi-dropdown");
-				
-				if ($("span#new-notifications").html() != '') {
-					$(this).find('span#new-notifications').empty();
-				}
-
-				pt_get_notifications({sa:1});
-			}
-		});
-
-		setInterval(function(){
-			pt_get_notifications({type:'new'});
-		}, 6000);
-	});
+    var ptNotificationPoll;
+    jQuery(document).ready(function($) {
+        ptNotificationPoll = PTBackgroundPoll.create({
+            hidden: function () { return document.hidden; },
+            setTimer: window.setTimeout.bind(window), clearTimer: window.clearTimeout.bind(window),
+            request: function (args, done) { pt_request_notifications(args || {type: 'new'}, done); }
+        });
+        ptNotificationPoll.refresh();
+        // Keep publication fallback until the independent scheduler is proven.
+        UpdateInfo();
+        $(document).off('visibilitychange.ptNotifications').on('visibilitychange.ptNotifications', ptNotificationPoll.visibility);
+        $('#get-notifications').off('click.ptNotifications').on('click.ptNotifications', function () {
+            if ($('#notifications').css('display') == 'none') {
+                $(this).find('span#new-notifications').empty();
+                pt_get_notifications({sa: 1});
+            }
+        });
+    });
+    function pt_get_notifications(args) { if (ptNotificationPoll) { ptNotificationPoll.refresh(args); } }
 	function UpdateInfo() {
 		$.post('{{LINK aj/user/update_info}}?hash=' + $('.main_session').val(), function(data, textStatus, xhr) {});
 	}
 
-	function pt_get_notifications(args){
+	function pt_request_notifications(args, complete){
 		if (!args) {
 			args = {};
 		}
 		var notfi_cont = $("ul.notfi-dropdown");
 		var notfi_set  = $("ul#notifications");
 		
-		defparams = {
+		var defparams = {
 			type: false,
 			sa:false
 		}
 
-		options = Object.assign(defparams,args);
-		data    = {'hash':$('.main_session').val()};
+		var options = Object.assign(defparams,args);
+		var data = {'hash':$('.main_session').val()};
 
 		if (options['type']) {
 			data['t'] = options['type'];
@@ -202,9 +201,11 @@
 			url: '{{LINK aj/get_notifications}}',
 			type: 'GET',
 			dataType: 'json',
+			timeout: 15000,
 			data:data
 		})
 		.done(function(data) {
+            if (options.type === 'new' && !data.new) { $('#new-notifications').empty(); }
 			if (data.status == 200) {
 				if (data.new) {
 					$("span#new-notifications").html($('<b>',{
@@ -232,40 +233,25 @@
 
 			if (options['sa']) {notfi_set.find('.pt_noti_progress').addClass('hidden');}
 			
+            complete(data.status == 200 || data.status == 304);
 		})
 		.fail(function() {
-			console.log("error");
+			notfi_set.find('.pt_noti_progress').addClass('hidden');
+            complete(false);
 		});
 	}
 </script>
 <?php endif ?>
 
+<script src="{{CONFIG site_url}}/assets/js/playlist-navigation.js"></script>
+<script src="{{CONFIG site_url}}/assets/js/search-suggestions.js?v=20261128"></script>
 <script>
 $('.search-icon').on('click', function(event) {
 	event.preventDefault();
 	$('.search-bar').toggleClass('hidden');
 });
 
-$('#search-bar').keyup(function(event) {
-	var search_value = $(this).val();
-	var search_dropdown = $('.search-dropdown');
-	if (search_value == '') {
-		search_dropdown.addClass('hidden');
-		search_dropdown.empty();
-		return false;
-	} else {
-		search_dropdown.removeClass('hidden');
-	}
-    $.post('{{LINK aj/search}}', {search_value: search_value}, function(data, textStatus, xhr) {
-    	if (data.status == 200) {
-    		search_dropdown.html(data.html);
-    	} else {
-	       search_dropdown.addClass('hidden');
-		   search_dropdown.empty();
-		   return false;
-    	}
-    });
-});
+PTSearchSuggestions.mount(jQuery, '{{LINK aj/search}}');
 
 jQuery(document).click(function(event){
     if (!(jQuery(event.target).closest(".search-dropdown").length)) {

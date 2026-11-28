@@ -1,0 +1,65 @@
+name: Traffic staging release rehearsal
+
+on:
+  push:
+    branches: [codex/traffic-readiness-20261128]
+    paths:
+      - '.github/workflows/traffic-staging-rehearsal.yml'
+      - 'tools/traffic-staging-rehearsal.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-traffic-staging-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Temporarily test staging and restore its original checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Rehearse candidate release and rollback on staging
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 20s
+          command_timeout: 18m
+          script: |
+            set -eu
+            umask 077
+            target='${{ github.sha }}'
+            case "$target" in *[!a-f0-9]*|'') echo 'Invalid candidate revision'; exit 1;; esac
+            [ "${#target}" -eq 40 ]
+            production='/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            staging_legacy='/home/admin/web/test-videos.connersclinic.com/public_html'
+            staging_current="$(dirname "$production")/test-videos.connersclinic.com"
+            if [ -d "$staging_legacy" ] && [ ! -d "$staging_current" ]; then
+              staging="$staging_legacy"
+            elif [ -d "$staging_current" ] && [ ! -d "$staging_legacy" ]; then
+              staging="$staging_current"
+            else
+              echo 'Staging location is absent or ambiguous'; exit 1
+            fi
+            private_base="$(dirname "$production")/.codex-video-traffic"
+            mkdir -p "$private_base"
+            chmod 700 "$private_base"
+            candidate=$(mktemp -d "$private_base/read-check.XXXXXX")
+            chmod 700 "$candidate"
+            git init --quiet "$candidate"
+            if ! git -C "$candidate" fetch --quiet --depth=1 'https://github.com/Conners-Clinic/Video-Site.git' "$target" >"$candidate/checkout.log" 2>&1; then
+              echo 'Candidate source fetch failed; details retained privately'; exit 1
+            fi
+            if ! git -C "$candidate" -c advice.detachedHead=false checkout --quiet --detach "$target" >>"$candidate/checkout.log" 2>&1; then
+              echo 'Candidate checkout failed; details retained privately'; exit 1
+            fi
+            [ "$(git -C "$candidate" rev-parse HEAD)" = "$target" ]
+            cd "$candidate"
+            printf 'Candidate revision: %s\n' "$target"
+            php -l tools/traffic-staging-rehearsal.php >/dev/null
+            php tools/traffic-staging-rehearsal.php --site-root="$staging" --private-base="$private_base" --target="$target" --browser-window=0

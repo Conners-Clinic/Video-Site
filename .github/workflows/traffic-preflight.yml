@@ -1,0 +1,268 @@
+name: Traffic access preflight
+
+on:
+  push:
+    branches: [codex/traffic-readiness-20261128]
+    paths: ['.github/workflows/traffic-preflight.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-traffic-access-preflight
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Read-only server and database access check
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect through existing SSH connection
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3, same revision as production
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 20s
+          command_timeout: 2m
+          script: |
+            set -eu
+            command -v php >/dev/null
+            php -d display_errors=0 -d log_errors=0 <<'TRAFFIC_PREFLIGHT_PHP'
+            <?php
+            // Executed on stdin over the existing deployment SSH connection. No application bootstrap.
+            if (PHP_SAPI !== 'cli') { http_response_code(404); exit(1); }
+            error_reporting(0);
+            ini_set('display_errors', '0');
+            ini_set('log_errors', '0');
+            set_time_limit(90);
+
+            function gitRead($root, $arguments) {
+                if (!function_exists('exec')) { return null; }
+                $lines = array(); $status = 1;
+                exec('git --no-optional-locks -C ' . escapeshellarg($root) . ' ' . $arguments . ' 2>/dev/null', $lines, $status);
+                return $status === 0 ? implode("\n", $lines) : null;
+            }
+
+            function readSiteConfig($file) {
+                $level = ob_get_level();
+                ob_start();
+                try {
+                    return (static function ($configFile) { require $configFile; return get_defined_vars(); })($file);
+                } finally {
+                    while (ob_get_level() > $level) { ob_end_clean(); }
+                }
+            }
+
+            function publicTree($root, $revision) {
+                $text = gitRead($root, 'ls-tree -r ' . escapeshellarg($revision));
+                $out = array();
+                foreach (explode("\n", (string) $text) as $line) {
+                    if (preg_match('/^([0-7]+) blob ([a-f0-9]{40})\t(.+)$/D', $line, $match)) {
+                        $out[$match[3]] = $match[1] . ':' . $match[2];
+                    }
+                }
+                return $out;
+            }
+
+            function mediaChangeSummary($root) {
+                $path = 'assets/includes/functions_one.php';
+                $original = gitRead($root, 'show HEAD:' . $path);
+                $actual = is_readable($root . '/' . $path) ? file_get_contents($root . '/' . $path) : false;
+                if ($original === null || $actual === false) { return array('comparison_available' => false); }
+                $normalize = static function ($value) { return rtrim(str_replace("\r\n", "\n", $value)); };
+                $original = $normalize($original); $actual = $normalize($actual);
+                return array(
+                    'comparison_available' => true,
+                    'only_line_endings_or_final_newline_changed' => $original === $actual,
+                    'only_known_media_suffix_removed' => str_replace(' . "?a"', '', $original) === $actual,
+                );
+            }
+
+            function inspectSite($label, $candidates, $expectedHost, $salt, &$identities) {
+                $result = array('candidate_directories_found' => 0, 'directory_found' => false);
+                $roots = array();
+                foreach ($candidates as $candidate) {
+                    $real = realpath($candidate);
+                    if ($real !== false && is_dir($real)) { $roots[$real] = true; }
+                }
+                $result['candidate_directories_found'] = count($roots);
+                if (count($roots) !== 1) {
+                    $result['status'] = count($roots) ? 'ambiguous_directory' : 'directory_missing';
+                    return $result;
+                }
+                $root = key($roots);
+                $result['directory_found'] = true;
+                $result['config_readable'] = is_readable($root . '/config.php');
+                $result['directory_writable'] = is_writable($root);
+                $head = gitRead($root, 'rev-parse HEAD');
+                $result['git_head'] = is_string($head) && preg_match('/^[a-f0-9]{40}$/D', $head) ? $head : null;
+                $branch = gitRead($root, 'symbolic-ref --quiet --short HEAD');
+                $result['git_branch'] = in_array($branch, array('main', 'super'), true) ? $branch : 'other_or_detached';
+                $changes = gitRead($root, 'status --porcelain --untracked-files=no');
+                $result['tracked_change_count'] = $changes === null ? null : ($changes === '' ? 0 : count(explode("\n", $changes)));
+                $result['change_status_counts'] = array();
+                $result['changed_application_paths'] = array();
+                $knownPaths = array('assets/init.php', 'assets/includes/app_start.php', 'assets/includes/functions_one.php',
+                    'assets/includes/functions_general.php', 'assets/includes/functions_transcribe.php',
+                    'ajax/search.php', 'ajax/user.php', 'sources/home/content.php', 'sources/watch/content.php',
+                    'sources/search/content.php', 'themes/youplay/layout/container.html',
+                    'themes/youplay/layout/header/content.html', '.htaccess', '.github/workflows/deploy.yml');
+                foreach ($changes === null || $changes === '' ? array() : explode("\n", $changes) as $change) {
+                    $state = substr($change, 0, 2);
+                    $result['change_status_counts'][$state] = ($result['change_status_counts'][$state] ?? 0) + 1;
+                    $path = substr($change, 3);
+                    if (in_array($path, $knownPaths, true)) { $result['changed_application_paths'][] = $path; }
+                }
+                $result['key_file_sha256'] = array();
+                foreach ($knownPaths as $path) {
+                    if (is_file($root . '/' . $path)) { $result['key_file_sha256'][$path] = hash_file('sha256', $root . '/' . $path); }
+                }
+                $result['unfinished_git_operations'] = array();
+                foreach (array('rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD') as $operation) {
+                    $location = gitRead($root, 'rev-parse --git-path ' . escapeshellarg($operation));
+                    if ($location !== null && file_exists($location[0] === '/' ? $location : $root . '/' . $location)) {
+                        $result['unfinished_git_operations'][] = $operation;
+                    }
+                }
+                if ($label === 'staging') { $result['media_helper_change'] = mediaChangeSummary($root); }
+                $rebaseDir = gitRead($root, 'rev-parse --git-path rebase-merge');
+                if ($rebaseDir !== null) {
+                    $rebaseDir = $rebaseDir[0] === '/' ? $rebaseDir : $root . '/' . $rebaseDir;
+                    if (is_dir($rebaseDir)) {
+                        $result['rebase'] = array();
+                        foreach (array('orig-head', 'onto', 'stopped-sha') as $name) {
+                            $value = is_readable($rebaseDir . '/' . $name) ? trim(file_get_contents($rebaseDir . '/' . $name)) : '';
+                            $result['rebase'][$name] = preg_match('/^[a-f0-9]{40}$/D', $value) ? $value : null;
+                        }
+                        foreach (array('done', 'git-rebase-todo') as $name) {
+                            $lines = is_readable($rebaseDir . '/' . $name) ? file($rebaseDir . '/' . $name, FILE_IGNORE_NEW_LINES) : array();
+                            $result['rebase'][$name . '_command_count'] = count(array_filter($lines, static function ($v) { return preg_match('/^\s*(pick|reword|edit|squash|fixup|exec|break|drop|label|reset|merge|update-ref)\b/', $v); }));
+                        }
+                        $snapshots = array(publicTree($root, '07ec37f96dd0c3f9dc0fca256a9d849b37be0a46'), publicTree($root, '1ac6695dc69fc7d72f52aa5929f621ec73623482'));
+                        $result['rebase']['index_entries_not_in_known_snapshots'] = 0;
+                        $result['rebase']['conflicted_public_paths'] = array();
+                        $index = gitRead($root, 'ls-files --stage');
+                        foreach (explode("\n", (string) $index) as $line) {
+                            if (!preg_match('/^([0-7]+) ([a-f0-9]{40}) ([0-3])\t(.+)$/D', $line, $match)) { continue; }
+                            $value = $match[1] . ':' . $match[2]; $path = $match[4];
+                            $known = ($snapshots[0][$path] ?? null) === $value || ($snapshots[1][$path] ?? null) === $value;
+                            if (!$known) { $result['rebase']['index_entries_not_in_known_snapshots']++; }
+                            if ($match[3] !== '0' && (isset($snapshots[0][$path]) || isset($snapshots[1][$path]))) {
+                                $result['rebase']['conflicted_public_paths'][$path] = true;
+                            }
+                        }
+                        $result['rebase']['conflicted_public_paths'] = array_keys($result['rebase']['conflicted_public_paths']);
+                    }
+                }
+                if (!$result['config_readable']) { $result['status'] = 'config_unreadable'; return $result; }
+                $previous = getcwd();
+                $db = null;
+                try {
+                    chdir($root);
+                    $config = readSiteConfig($root . '/config.php');
+                    $result['configured_site_host_matches'] = isset($config['site_url'])
+                        ? strtolower((string) parse_url($config['site_url'], PHP_URL_HOST)) === $expectedHost : null;
+                    foreach (array('sql_db_host', 'sql_db_user', 'sql_db_pass', 'sql_db_name') as $name) {
+                        if (!isset($config[$name]) || !is_string($config[$name])) {
+                            $result['status'] = 'database_config_incomplete'; return $result;
+                        }
+                    }
+                    if (!extension_loaded('mysqli')) { $result['status'] = 'mysqli_unavailable'; return $result; }
+                    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+                    $db = mysqli_init();
+                    $db->options(MYSQLI_OPT_CONNECT_TIMEOUT, 5);
+                    $db->real_connect($config['sql_db_host'], $config['sql_db_user'], $config['sql_db_pass'], $config['sql_db_name']);
+                    $db->set_charset('utf8mb4');
+                    $result['database_connected'] = true;
+                    $row = $db->query('SELECT VERSION() AS version, DATABASE() AS db_name, @@hostname AS db_server, @@port AS db_port')->fetch_assoc();
+                    $result['database_version'] = preg_replace('/[^A-Za-z0-9. +_:-]/', '', (string) $row['version']);
+                    $instance = $row['db_server'] . ':' . $row['db_port'];
+                    try {
+                        $uuid = $db->query('SELECT @@server_uuid AS uuid')->fetch_assoc();
+                        if (!empty($uuid['uuid'])) { $instance = $uuid['uuid']; }
+                    } catch (Throwable $ignored) { /* MariaDB may not implement server_uuid. */ }
+                    $identities[$label] = hash_hmac('sha256', $instance . "\0" . $row['db_name'], $salt);
+                    $result['schema_level_privileges'] = array();
+                    $scope = '`' . str_replace('`', '``', $row['db_name']) . '`.*';
+                    try {
+                        $grants = $db->query('SHOW GRANTS');
+                        while ($grant = $grants->fetch_row()) {
+                            if (!preg_match('/^GRANT (.*?) ON (.*?) TO /i', $grant[0], $parts)) { continue; }
+                            if ($parts[2] !== '*.*' && $parts[2] !== $scope) { continue; }
+                            foreach (array('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'INDEX', 'DROP') as $privilege) {
+                                if ($parts[1] === 'ALL PRIVILEGES' || in_array($privilege, explode(', ', $parts[1]), true)) {
+                                    $result['schema_level_privileges'][$privilege] = true;
+                                }
+                            }
+                        }
+                        $result['schema_level_privileges'] = array_keys($result['schema_level_privileges']);
+                    } catch (Throwable $ignored) { $result['schema_level_privileges'] = null; }
+                    // Remaining inspection is explicitly read-only. No DDL, application include or maintenance job.
+                    $db->begin_transaction(MYSQLI_TRANS_START_READ_ONLY);
+                    $stmt = $db->prepare('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ?');
+                    $stmt->bind_param('s', $row['db_name']); $stmt->execute(); $stmt->bind_result($tableCount); $stmt->fetch(); $stmt->close();
+                    $result['table_count'] = (int) $tableCount;
+                    $result['config_table_readable'] = false;
+                    try {
+                        $settings = $db->query("SELECT name, value FROM config WHERE name IN ('theme', 'server', 'coinpayments', 'transcript_system')");
+                        $result['config_table_readable'] = true;
+                        while ($setting = $settings->fetch_assoc()) {
+                            $allowed = $setting['name'] === 'theme' ? array('youplay', 'default') : ($setting['name'] === 'server' ? array('php', 'nodejs', 'PHP', 'Nodejs', '0', '1') : array('on', 'off', '0', '1'));
+                            $result[$setting['name']] = in_array($setting['value'], $allowed, true) ? $setting['value'] : 'other';
+                        }
+                    } catch (Throwable $ignored) { /* Report only readability, never SQL or exception details. */ }
+                    $db->rollback();
+                    $result['status'] = 'read_only_inspection_complete';
+                } catch (Throwable $error) {
+                    $result['status'] = 'inspection_failed';
+                    $result['error_code'] = (int) $error->getCode();
+                    // Exceptions may contain database usernames, hosts or config paths: do not log their text.
+                } finally {
+                    if ($db instanceof mysqli) { try { $db->close(); } catch (Throwable $ignored) {} }
+                    if ($previous !== false) { chdir($previous); }
+                }
+                return $result;
+            }
+
+            $production = '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com';
+            $report = array(
+                'mode' => 'read_only_access_preflight',
+                'ssh_command_executed' => true,
+                'php_cli_version' => PHP_VERSION,
+                'php_cli_extensions' => array_values(array_intersect(array('mysqli', 'mbstring', 'curl', 'json', 'dom', 'zip', 'gd', 'pcntl', 'posix', 'Zend OPcache'), get_loaded_extensions())),
+                'fpm_runtime_verified' => false,
+                'sites' => array(),
+            );
+            $salt = random_bytes(32); $identities = array();
+            $report['sites']['production'] = inspectSite('production', array($production), 'videos.connersclinic.com', $salt, $identities);
+            $report['sites']['staging'] = inspectSite('staging', array(
+                '/home/admin/web/test-videos.connersclinic.com/public_html',
+                dirname($production) . '/test-videos.connersclinic.com',
+            ), 'test-videos.connersclinic.com', $salt, $identities);
+            $report['connected_database_identities_distinct'] = isset($identities['production'], $identities['staging'])
+                ? !hash_equals($identities['production'], $identities['staging']) : null;
+            $report['cron_inventory'] = array('available' => false);
+            if (function_exists('exec')) {
+                $cronLines = array(); $cronStatus = 1;
+                exec('crontab -l 2>/dev/null', $cronLines, $cronStatus);
+                if ($cronStatus === 0) {
+                    $report['cron_inventory'] = array('available' => true, 'application_job_count' => 0, 'http_runner_count' => 0, 'php_runner_count' => 0);
+                    foreach ($cronLines as $cronLine) {
+                        if (!preg_match('/^\s*#|^\s*$/', $cronLine) && preg_match('/transcri|seo-pipeline|cronjob|videos\.connersclinic/i', $cronLine)) {
+                            $report['cron_inventory']['application_job_count']++;
+                            if (preg_match('/\b(curl|wget)\b/', $cronLine)) { $report['cron_inventory']['http_runner_count']++; }
+                            if (preg_match('/\bphp[0-9.]*\b/', $cronLine)) { $report['cron_inventory']['php_runner_count']++; }
+                        }
+                    }
+                }
+            }
+            echo "TRAFFIC_PREFLIGHT_JSON=" . json_encode($report, JSON_UNESCAPED_SLASHES) . "\n";
+            $complete = $report['sites']['production']['status'] === 'read_only_inspection_complete'
+                && $report['sites']['staging']['status'] === 'read_only_inspection_complete'
+                && $report['connected_database_identities_distinct'] === true;
+            exit($complete ? 0 : 2);
+            TRAFFIC_PREFLIGHT_PHP

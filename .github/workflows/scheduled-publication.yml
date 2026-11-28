@@ -1,0 +1,33 @@
+name: Publish scheduled videos
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-scheduled-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run bounded publisher without a browser session
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          timeout: 20s
+          command_timeout: 45s
+          script: |
+            set -eu
+            cd '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            test -f tools/publish-scheduled.php
+            php tools/publish-scheduled.php

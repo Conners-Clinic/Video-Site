@@ -21,69 +21,78 @@ on:
       - '.claude/skills/continuity-onboard/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: true
+  group: ${{ github.ref_name == 'main' && 'video-traffic-staging-release' || 'video-traffic-production-release' }}
+  cancel-in-progress: false
 
 jobs:
-  deploy-test:
-    name: Deploy to test-videos
-    if: github.ref == 'refs/heads/main'
+  javascript:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/super'
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     steps:
-      - name: Deploy via SSH Password
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          port: ${{ secrets.SERVER_PORT }}
-          script: |
-            cd /home/admin/web/test-videos.connersclinic.com/public_html/
-            git fetch origin
-            git reset --hard origin/main
-
-  deploy-production:
-    name: Deploy to production
-    if: github.ref == 'refs/heads/super'
+      - name: Check exact source revision and browser controllers
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='${{ github.sha }}'
+          [[ "$target" =~ ^[a-f0-9]{40}$ ]]
+          git init --quiet source
+          git -C source fetch --quiet --depth=1 'https://github.com/Conners-Clinic/Video-Site.git' "$target"
+          git -C source -c advice.detachedHead=false checkout --quiet --detach "$target"
+          test "$(git -C source rev-parse HEAD)" = "$target"
+          cd source
+          node tests/search-suggestions.cjs
+          node tests/background-poll.cjs
+          node tests/playlist-navigation.cjs
+  deploy:
+    needs: javascript
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/super'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fast-forward production via SSH
+      - name: Release exact revision with migration checks and rollback
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 20s
+          command_timeout: 8m
           script: |
             set -eu
-            cd '/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
-            export GIT_TERMINAL_PROMPT=0
-
-            for operation in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
-              if [ -e "$(git rev-parse --git-path "$operation")" ]; then
-                echo "Deploy stopped: an unfinished Git operation is present ($operation)." >&2
-                exit 1
-              fi
-            done
-
-            branch=$(git symbolic-ref --quiet --short HEAD || true)
-            if [ "$branch" != super ]; then
-              echo "Deploy stopped: the server checkout must be on super." >&2
-              exit 1
+            umask 077
+            target='${{ github.sha }}'
+            branch='${{ github.ref_name }}'
+            case "$target" in *[!a-f0-9]*|'') echo 'Invalid release revision'; exit 1;; esac
+            [ "${#target}" -eq 40 ]
+            production='/home/clients/67b433575a2b4e8ed916166f746d19d6/sites/videos.connersclinic.com'
+            if [ "$branch" = super ]; then
+              site="$production"; environment=production
+            elif [ "$branch" = main ]; then
+              legacy='/home/admin/web/test-videos.connersclinic.com/public_html'
+              current="$(dirname "$production")/test-videos.connersclinic.com"
+              if [ -d "$legacy" ] && [ ! -d "$current" ]; then site="$legacy";
+              elif [ -d "$current" ] && [ ! -d "$legacy" ]; then site="$current";
+              else echo 'Staging location absent or ambiguous'; exit 1; fi
+              environment=staging
+            else echo 'Unsupported release branch'; exit 1; fi
+            private_base="$(dirname "$production")/.codex-video-traffic"
+            mkdir -p "$private_base"
+            chmod 700 "$private_base"
+            candidate=$(mktemp -d "$private_base/release-source.XXXXXX")
+            git init --quiet "$candidate"
+            if ! git -C "$candidate" fetch --quiet --depth=1 'https://github.com/Conners-Clinic/Video-Site.git' "$target" >"$candidate/checkout.log" 2>&1; then
+              echo 'Source fetch failed; details retained privately'; exit 1
             fi
-
-            if [ -n "$(git --no-optional-locks status --porcelain --untracked-files=no)" ]; then
-              echo "Deploy stopped: the server checkout has uncommitted tracked changes." >&2
-              exit 1
+            if ! git -C "$candidate" -c advice.detachedHead=false checkout --quiet --detach "$target" >>"$candidate/checkout.log" 2>&1; then
+              echo 'Candidate checkout failed; details retained privately'; exit 1
             fi
-
-            git pull --ff-only origin super
-            deployed=$(git rev-parse HEAD)
-            fetched=$(git rev-parse FETCH_HEAD)
-            if [ "$deployed" != "$fetched" ]; then
-              echo "Deploy stopped: the server checkout is ahead of origin/super." >&2
-              exit 1
-            fi
-            printf 'Deployed super at %s\n' "$deployed"
+            [ "$(git -C "$candidate" rev-parse HEAD)" = "$target" ]
+            cd "$candidate"
+            php -l tools/deploy-traffic.php >/dev/null
+            php tools/deploy-traffic.php --site-root="$site" --private-base="$private_base" --target="$target" --environment="$environment" --recover-known-rebase

@@ -9,7 +9,7 @@
 	
 	<div class="vid_srch_filtr" id="filter_settings" style="display: <?php echo (empty($_POST['date']) && empty($_POST['category'])) ? 'none': 'block'?>;">
 		<div class="upload_video_bg_color">
-			<form class="search_filter_form row pt_forms" method="POST" action="{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.$_GET['keyword'] : '') ?><?php echo(!empty($pt->page_number) ? '&page_id='.$pt->page_number : '') ?>">
+			<form class="search_filter_form row pt_forms" method="POST" action="{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.rawurlencode($_GET['keyword']) : '') ?><?php echo(!empty($pt->page_number) ? '&page_id='.$pt->page_number : '') ?>">
 				<div class="form-group col-lg-4">
 					<label class="col-md-12 bold" for="type">{{LANG upload_date}}</label>
 					<div class="col-md-12">
@@ -145,10 +145,10 @@
 
 <script type="text/javascript">
 	function ChangePage() {
-		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.$_GET['keyword'] : '') ?>&page_id=1");
+		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.rawurlencode($_GET['keyword']) : '') ?>&page_id=1");
 	}
 	function GoToPage(page_id,last='') {
-		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.$_GET['keyword'] : '') ?>&page_id="+page_id+last);
+		$('.search_filter_form').attr('action', "{{LINK search}}<?php echo(!empty($_GET['keyword']) ? '?keyword='.rawurlencode($_GET['keyword']) : '') ?>&page_id="+page_id+last);
 		$('#submit').click();
 	}
 

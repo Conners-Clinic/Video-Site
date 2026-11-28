@@ -1,7 +1,9 @@
 <?php
 if($first == 'update_info'){
     PT_RunInBackground(array('status' => 200));
-    $is_there_scheduled = $db->where('privacy',0,'!=')->where('publication_date',0,'!=')->where('publication_date',time(),'<=')->update(T_VIDEOS,array('privacy' => 0));
+    // Retain the browser fallback until the independent scheduler is confirmed live.
+    try { PT_PublishDueVideos($mysqli); }
+    catch (Throwable $error) { error_log('Scheduled publication fallback failed'); }
 }
 if ($first == 'download_user_info' && IS_LOGGED) {
     $data['status'] = 200;
