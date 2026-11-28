@@ -31,12 +31,17 @@ function trafficRebaseEvidence($root, $private) {
         $stages[$match[4]][(int) $match[3]] = array('mode' => $match[1], 'sha' => $match[2]);
         if (!isset($known[$match[4]][$match[1] . ':' . $match[2]])) { $unknownIndex++; }
     }
-    $matches = 0; $conflictMatches = 0; $unknownWorking = 0;
+    $matches = 0; $conflictMatches = 0; $unknownWorking = 0; $unknownKinds = array();
     foreach ($stages as $path => $entries) {
         $file = $root . '/' . $path;
         $mode = is_link($file) ? '120000' : ((fileperms($file) & 0111) ? '100755' : '100644');
         $bytes = is_link($file) ? readlink($file) : (is_file($file) ? file_get_contents($file) : false);
-        if ($bytes === false) { $unknownWorking++; continue; }
+        if ($bytes === false) {
+            $unknownWorking++;
+            $kind = is_dir($file) ? 'directory_at_tracked_file' : 'missing_tracked_file';
+            $unknownKinds[$kind] = ($unknownKinds[$kind] ?? 0) + 1;
+            continue;
+        }
         $sha = sha1('blob ' . strlen($bytes) . "\0" . $bytes);
         if (isset($known[$path][$mode . ':' . $sha])) { $matches++; continue; }
         if (!isset($entries[0]) && $path === 'upload/.htaccess') {
@@ -52,11 +57,15 @@ function trafficRebaseEvidence($root, $private) {
             if ($code >= 0 && $code <= 127 && $normalize($merged) === $normalize($bytes)) { $conflictMatches++; }
             else { $unknownWorking++; }
             foreach (array(1,2,3) as $stage) { unlink($directory . '/' . $stage); } rmdir($directory);
-        } else { $unknownWorking++; }
+        } else {
+            $unknownWorking++;
+            $kind = is_link($file) ? 'different_symlink' : 'different_regular_file';
+            $unknownKinds[$kind] = ($unknownKinds[$kind] ?? 0) + 1;
+        }
     }
     return array('known_rebase_matches' => true, 'tracked_files' => count($stages), 'public_working_file_matches' => $matches,
         'reproduced_conflict_files' => $conflictMatches, 'unknown_index_entries' => $unknownIndex,
-        'unknown_working_files' => $unknownWorking, 'safe_to_recover_known_rebase' => $unknownIndex === 0 && $unknownWorking === 0);
+        'unknown_working_files' => $unknownWorking, 'unknown_kinds' => $unknownKinds, 'safe_to_recover_known_rebase' => $unknownIndex === 0 && $unknownWorking === 0);
 }
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     try {
