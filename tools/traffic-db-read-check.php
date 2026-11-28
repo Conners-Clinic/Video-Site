@@ -161,6 +161,28 @@ try {
         $report['search_fixtures'][$term] = trafficComparison($before, $after);
         $report['search_fixtures'][$term]['returned_rows'] = count($after['value']);
     }
+    $phase = 'index_inventory';
+    $tables = array(T_VIDEOS, T_VIEWS, T_COMMENTS, T_COMM_REPLIES, T_PLAYLISTS, T_WLATER, T_NOTIFICATIONS, T_DIS_LIKES, T_VIDEO_TIME);
+    foreach ($tables as $table) {
+        $indexes = $db->rawQuery('SELECT INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY INDEX_NAME, SEQ_IN_INDEX', array($table));
+        $report['indexes'][$table] = array_map(static function ($row) {
+            return array('name' => $row->INDEX_NAME, 'position' => (int) $row->SEQ_IN_INDEX, 'column' => $row->COLUMN_NAME, 'unique' => !(bool) $row->NON_UNIQUE);
+        }, $indexes);
+    }
+    $phase = 'query_plan_inventory';
+    $sample_id = (int) ($sample_videos[0]->id ?? 0);
+    $queries = array(
+        'comments' => array('SELECT id FROM ' . T_COMMENTS . ' WHERE video_id = ? AND pinned <> 1 ORDER BY id DESC LIMIT 5', array($sample_id)),
+        'replies' => array('SELECT id FROM ' . T_COMM_REPLIES . ' WHERE comment_id = ? ORDER BY id ASC LIMIT 20', array(0)),
+        'view_ranking' => array('SELECT video_id, COUNT(*) AS total FROM ' . T_VIEWS . ' WHERE time >= ? GROUP BY video_id ORDER BY total DESC LIMIT 20', array(time() - 2592000)),
+        'resume' => array('SELECT time FROM ' . T_VIDEO_TIME . ' WHERE user_id = ? AND video_id = ? LIMIT 1', array(0, $sample_id))
+    );
+    foreach ($queries as $name => $query) {
+        $plan = $db->rawQuery('EXPLAIN ' . $query[0], $query[1]);
+        $report['query_plans'][$name] = array_map(static function ($row) {
+            return array('table' => $row->table, 'access' => $row->type, 'key' => $row->key, 'estimated_rows' => (int) $row->rows, 'extra' => $row->Extra);
+        }, $plan);
+    }
     $mysqli->rollback();
     $pass = $report['languages']['same_result'] && $report['categories']['same_result']
         && (!isset($report['transcript']['same_result']) || $report['transcript']['same_result']);

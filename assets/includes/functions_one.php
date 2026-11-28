@@ -11,6 +11,7 @@
 require_once __DIR__ . '/traffic_reads.php';
 require_once __DIR__ . '/traffic_search.php';
 require_once __DIR__ . '/traffic_cards.php';
+require_once __DIR__ . '/traffic_publication.php';
 require_once('app_start.php');
 use Aws\S3\S3Client;
 use Google\Cloud\Storage\StorageClient;

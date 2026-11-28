@@ -16,6 +16,8 @@ on:
       - 'ajax/search.php'
       - 'ajax/load-more.php'
       - 'tools/traffic-db-read-check.php'
+      - 'tools/traffic-publication-check.php'
+      - 'tools/publish-scheduled.php'
   workflow_dispatch:
 
 permissions:
@@ -91,3 +93,4 @@ jobs:
             fi
             echo 'PASS tests/traffic-cards.php --signed'
             php tools/traffic-db-read-check.php --site-root="$staging"
+            php tools/traffic-publication-check.php --site-root="$staging"

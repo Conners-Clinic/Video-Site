@@ -97,6 +97,19 @@ try {
         $result['private_backup_created'] = is_file($archive); $result['private_backup_verified'] = $status === 0;
         if ($status !== 0) { throw new RuntimeException('Snapshot verification failed'); }
         file_put_contents($private . '/latest-' . $label . '-snapshot', $snapshot);
+        $phase = $label . '_private_merge_check';
+        $baseFile = $snapshot . '/base.php'; $localFile = $snapshot . '/local.php'; $newFile = $snapshot . '/candidate.php';
+        file_put_contents($baseFile, str_replace("\r\n", "\n", checkoutGit($root, 'show HEAD:' . $path)) . "\n");
+        file_put_contents($localFile, str_replace("\r\n", "\n", file_get_contents($root . '/' . $path)));
+        file_put_contents($newFile, str_replace("\r\n", "\n", file_get_contents(dirname(__DIR__) . '/' . $path)));
+        $mergedFile = $snapshot . '/candidate-with-local-changes.php';
+        exec('git merge-file -p ' . escapeshellarg($localFile) . ' ' . escapeshellarg($baseFile) . ' ' . escapeshellarg($newFile) . ' >' . escapeshellarg($mergedFile) . ' 2>>' . escapeshellarg($log), $ignored, $status);
+        $result['candidate_three_way_merge_clean'] = $status === 0;
+        if ($status === 0) {
+            exec('php -l ' . escapeshellarg($mergedFile) . ' >>' . escapeshellarg($log) . ' 2>&1', $ignored, $status);
+            $result['candidate_with_local_changes_lints'] = $status === 0;
+        }
+
         $report[$label] = $result;
     }
     echo 'TRAFFIC_CHECKOUT_CHECK_JSON=' . json_encode($report, JSON_UNESCAPED_SLASHES) . "\n";
