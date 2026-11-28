@@ -57,6 +57,31 @@ jobs:
                 }
             }
             
+            function publicTree($root, $revision) {
+                $text = gitRead($root, 'ls-tree -r ' . escapeshellarg($revision));
+                $out = array();
+                foreach (explode("\n", (string) $text) as $line) {
+                    if (preg_match('/^([0-7]+) blob ([a-f0-9]{40})\t(.+)$/D', $line, $match)) {
+                        $out[$match[3]] = $match[1] . ':' . $match[2];
+                    }
+                }
+                return $out;
+            }
+            
+            function mediaChangeSummary($root) {
+                $path = 'assets/includes/functions_one.php';
+                $original = gitRead($root, 'show HEAD:' . $path);
+                $actual = is_readable($root . '/' . $path) ? file_get_contents($root . '/' . $path) : false;
+                if ($original === null || $actual === false) { return array('comparison_available' => false); }
+                $normalize = static function ($value) { return rtrim(str_replace("\r\n", "\n", $value)); };
+                $original = $normalize($original); $actual = $normalize($actual);
+                return array(
+                    'comparison_available' => true,
+                    'only_line_endings_or_final_newline_changed' => $original === $actual,
+                    'only_known_media_suffix_removed' => str_replace(' . "?a"', '', $original) === $actual,
+                );
+            }
+            
             function inspectSite($label, $candidates, $expectedHost, $salt, &$identities) {
                 $result = array('candidate_directories_found' => 0, 'directory_found' => false);
                 $roots = array();
@@ -103,6 +128,7 @@ jobs:
                         $result['unfinished_git_operations'][] = $operation;
                     }
                 }
+                if ($label === 'staging') { $result['media_helper_change'] = mediaChangeSummary($root); }
                 $rebaseDir = gitRead($root, 'rev-parse --git-path rebase-merge');
                 if ($rebaseDir !== null) {
                     $rebaseDir = $rebaseDir[0] === '/' ? $rebaseDir : $root . '/' . $rebaseDir;
@@ -116,6 +142,20 @@ jobs:
                             $lines = is_readable($rebaseDir . '/' . $name) ? file($rebaseDir . '/' . $name, FILE_IGNORE_NEW_LINES) : array();
                             $result['rebase'][$name . '_command_count'] = count(array_filter($lines, static function ($v) { return preg_match('/^\s*(pick|reword|edit|squash|fixup|exec|break|drop|label|reset|merge|update-ref)\b/', $v); }));
                         }
+                        $snapshots = array(publicTree($root, '07ec37f96dd0c3f9dc0fca256a9d849b37be0a46'), publicTree($root, '1ac6695dc69fc7d72f52aa5929f621ec73623482'));
+                        $result['rebase']['index_entries_not_in_known_snapshots'] = 0;
+                        $result['rebase']['conflicted_public_paths'] = array();
+                        $index = gitRead($root, 'ls-files --stage');
+                        foreach (explode("\n", (string) $index) as $line) {
+                            if (!preg_match('/^([0-7]+) ([a-f0-9]{40}) ([0-3])\t(.+)$/D', $line, $match)) { continue; }
+                            $value = $match[1] . ':' . $match[2]; $path = $match[4];
+                            $known = ($snapshots[0][$path] ?? null) === $value || ($snapshots[1][$path] ?? null) === $value;
+                            if (!$known) { $result['rebase']['index_entries_not_in_known_snapshots']++; }
+                            if ($match[3] !== '0' && (isset($snapshots[0][$path]) || isset($snapshots[1][$path]))) {
+                                $result['rebase']['conflicted_public_paths'][$path] = true;
+                            }
+                        }
+                        $result['rebase']['conflicted_public_paths'] = array_keys($result['rebase']['conflicted_public_paths']);
                     }
                 }
                 if (!$result['config_readable']) { $result['status'] = 'config_unreadable'; return $result; }
