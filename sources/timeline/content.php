@@ -91,46 +91,26 @@ if ($pt->second_page == 'liked-videos') {
 }
 
 if ($pt->second_page == 'play-lists') {
-
-    if ($pt->isowner === true) {
-        $playlists   = $db->where('user_id', $user_data->id)->get(T_LISTS);
-        $watch_later = $db->where('user_id', $user_data->id)->orderBy('id', 'ASC')->get(T_WLATER);
-        //$wl_count    = $db->where('user_id', $user_data->id)->getValue(T_WLATER, 'count(*)');
-        $wl_count    = 0;
-        $wl_html     = '';
-        foreach ($watch_later as $key => $value) {
-            if (!empty($value)) {
-                $wl_video = PT_GetVideoByID($value->video_id, 0, 0, 2);
-                if (!empty($wl_video) && empty($wl_html)) {
-
-                    foreach ($watch_later as $key2 => $value2) {
-                        $video_get2 = $db->where('user_id',$pt->blocked_array , 'NOT IN')->where('id', $value2->video_id)->getOne(T_VIDEOS);
-                        if (!empty($video_get2)) {
-                            $wl_count = $wl_count + 1;
-                        }
-                    }
-
-
-                    $wl_video_id  = $value->video_id;
-                    $videos_html .= PT_LoadPage('playlist/wl-list', array(
-                        'TITLE' => "Watch Later",
-                        'THUMBNAIL' => $wl_video->thumbnail,
-                        'COUNT' => $wl_count,
-                        'URL' => PT_Link('watch/' . PT_Slug($wl_video->title, $wl_video->video_id) . "?list=wl"),
-                        'LIST_ID' => 'wl',
-                        'VIDEO_ID_' => PT_Slug($wl_video->title, $wl_video->video_id)
-                    ));
-                    $wl_html = 1;
-                }
-            }
+    $list_page = PT_ListPageNumber($_GET['list_page'] ?? 1);
+    $db->where('user_id', $user_data->id)->where('user_id', $pt->blocked_array, 'NOT IN');
+    if (!$pt->isowner) { $db->where('privacy', 1); }
+    $list_total = (int) $db->getValue(T_LISTS, 'count(*)');
+    $list_pages = max(1, (int) ceil($list_total / 20));
+    $list_page = min($list_page, $list_pages);
+    $db->where('user_id', $user_data->id)->where('user_id', $pt->blocked_array, 'NOT IN');
+    if (!$pt->isowner) { $db->where('privacy', 1); }
+    $playlists = $db->orderBy('id', 'ASC')->get(T_LISTS, array(($list_page - 1) * 20, 20));
+    if ($pt->isowner && $list_page === 1) {
+        $wl = PT_ListWindow(true, 'wl', $user_data->id, 0, 1, 1);
+        $wl_cards = PT_VideoCards($wl['rows']);
+        if ($wl_cards) {
+            $video = $wl_cards[0];
+            $videos_html .= PT_LoadPage('playlist/wl-list', array('TITLE' => 'Watch Later',
+                'THUMBNAIL' => $video->thumbnail, 'COUNT' => $wl['total'],
+                'URL' => PT_Link('watch/' . PT_Slug($video->title, $video->video_id) . '?list=wl'),
+                'LIST_ID' => 'wl', 'VIDEO_ID_' => PT_Slug($video->title, $video->video_id)));
         }
-
     }
-
-    else{
-      $playlists   =  $db->where('user_id', $user_data->id)->where('user_id',$pt->blocked_array , 'NOT IN')->where('privacy', 1)->get(T_LISTS);
-    }
-
 }
 
 if (!empty($videos) && !$lists) {
@@ -168,42 +148,19 @@ if (!empty($videos) && !$lists) {
     }
 }
 
-elseif(!empty($playlists) && $lists){
-
-    foreach ($playlists as $key => $list) {
-        $list_html     = '';
-        $list_id       = $list->list_id;
-        $video         = $db->where('list_id', $list->list_id)->orderBy('id', 'asc')->get(T_PLAYLISTS);
-        $vid_count     = 0;
-        foreach ($video as $key => $value) {
-
-            if (isset($value->video_id)) {
-                $video_get = PT_GetVideoByID($value->video_id, 0, 0, 2);
-                //$vid_count = $db->where('user_id', $user_id->id)->where('list_id', $list_id)->getValue(T_PLAYLISTS, 'count(*)');
-
-                if (!empty($video_get) && empty($list_html)) {
-                    foreach ($video as $key2 => $value2) {
-                        $video_get2 = $db->where('user_id',$pt->blocked_array , 'NOT IN')->where('id', $value2->video_id)->getOne(T_VIDEOS);
-                        if (!empty($video_get2)) {
-                            $vid_count = $vid_count + 1;
-                        }
-                    }
-                    $videos_html .= PT_LoadPage('playlist/list', array(
-                        'ID' => $list->id,
-                        'TITLE' => $list->name,
-                        'THUMBNAIL' => $video_get->thumbnail,
-                        'COUNT' => $vid_count,
-                        'URL' => PT_Link('watch/' . PT_Slug($video_get->title, $video_get->video_id) . "/list/$list_id"),
-                        'LIST_ID' => $list_id,
-                        'VIDEO_ID_' => PT_Slug($video_get->title, $video_get->video_id)
-                    ));
-                    $list_html = 1;
-                }
-            }
-        }
+elseif (!empty($playlists) && $lists) {
+    foreach ($playlists as $list) {
+        $summary = PT_ListWindow(false, $list->list_id, $user_data->id, 0, 1, 1);
+        $list_cards = PT_VideoCards($summary['rows']);
+        if (!$list_cards) { continue; }
+        $video = $list_cards[0];
+        $videos_html .= PT_LoadPage('playlist/list', array('ID' => $list->id, 'TITLE' => $list->name,
+            'THUMBNAIL' => $video->thumbnail, 'COUNT' => $summary['total'],
+            'URL' => PT_Link('watch/' . PT_Slug($video->title, $video->video_id) . '?list=' . rawurlencode($list->list_id)),
+            'LIST_ID' => $list->list_id, 'VIDEO_ID_' => PT_Slug($video->title, $video->video_id)));
     }
 }
-
+if ($lists) { $videos_html .= PT_ListNavigation($pt->page_url_, $list_page, $list_pages); }
 
 if ($pt->second_page == 'activities' && $pt->config->post_system == 'on') {
     $posts = $db->where('user_id',$user_data->id)->orderBy('id', 'DESC')->get(T_ACTIVITES,30);

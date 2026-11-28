@@ -235,62 +235,9 @@ if (!empty($_GET['a']) && $_GET['a'] == "wl-tg" && !empty($_GET['id'])) {
         }
     }
 }
-if (!empty($_GET['a']) && $_GET['a'] == "sort" && !empty($_POST['video_array']) && is_array($_POST['video_array'])) {
-    if (!empty($_POST['video_array'][0]) && is_numeric($_POST['video_array'][0]) && $_POST['video_array'][0] > 0) {
-        if (!empty($_POST['type']) && $_POST['type'] == 'wl') {
-            $videos         = $db->where('user_id',$pt->user->id)->where('user_id',$pt->blocked_array , 'NOT IN')->get(T_WLATER);
-            $list_videos = array();
-            foreach ($videos as $key => $video) {
-                $list_videos[] = $video;
-            }
-            if (!empty($list_videos)) {
-                $video_array = array();
-                foreach ($_POST['video_array'] as $key => $value) {
-                    $new = $db->where('user_id',$pt->user->id)->where('video_id', PT_Secure($value))->where('user_id',$pt->blocked_array , 'NOT IN')->getOne(T_WLATER);
-                    if (!empty($new) && !empty($new->id)) {
-                        $video_array[] = $new;
-                    }
-                }
-                foreach ($list_videos as $key => $video) {
-                    $db->where('id', $video->id)->where('user_id',$pt->user->id)->where('user_id',$pt->blocked_array , 'NOT IN')->update(T_WLATER,array('video_id' => $video_array[$key]->video_id));
-                }
-                $data['status'] = 200;
-            }
-            else{
-                $data['status'] = 400;
-            }
-        }
-        else{
-            $list = $db->where('video_id', PT_Secure($_POST['video_array'][0]))->where('user_id',$pt->user->id)->where('user_id',$pt->blocked_array , 'NOT IN')->getOne(T_PLAYLISTS);
-            if (!empty($list) && !empty($list->list_id)) {
-                $videos         = $db->where('list_id', $list->list_id)->where('user_id',$pt->blocked_array , 'NOT IN')->get(T_PLAYLISTS);
-                $list_videos = array();
-                foreach ($videos as $key => $video) {
-                    $list_videos[] = $video;
-                }
-                if (!empty($list_videos)) {
-                    $video_array = array();
-                    foreach ($_POST['video_array'] as $key => $value) {
-                        $new = $db->where('list_id', $list->list_id)->where('user_id',$pt->user->id)->where('video_id', PT_Secure($value))->where('user_id',$pt->blocked_array , 'NOT IN')->getOne(T_PLAYLISTS);
-                        if (!empty($new) && !empty($new->id)) {
-                            $video_array[] = $new;
-                        }
-                    }
-                    foreach ($list_videos as $key => $video) {
-                        $db->where('list_id', $list->list_id)->where('id', $video->id)->where('user_id',$pt->user->id)->where('user_id',$pt->blocked_array , 'NOT IN')->update(T_PLAYLISTS,array('video_id' => $video_array[$key]->video_id));
-                    }
-                    $data['status'] = 200;
-                }
-                else{
-                    $data['status'] = 400;
-                }
-            }
-            else{
-                $data['status'] = 400;
-            }
-        }
-    }
-    else{
-        $data['status'] = 400;
-    }
+if (($_GET['a'] ?? '') === 'sort') {
+    $watch_later = ($_POST['type'] ?? '') === 'wl';
+    $list_key = is_string($_POST['list_id'] ?? null) ? $_POST['list_id'] : '';
+    $ok = PT_ReorderListWindow($db, $watch_later, $list_key, $pt->user->id, $_POST['video_array'] ?? null);
+    $data = array('status' => $ok ? 200 : 409);
 }

@@ -51,57 +51,7 @@ if ($vl3 === true) {
 	        $pt->is_verified      = false;
 	        $user_data            = PT_UserData($comment->user_id);
 	        $replies              = "";
-	        $comment_replies      = $db->where('comment_id', $comment->id)->get(T_COMM_REPLIES);
-
-	        foreach ($comment_replies as $reply) {
-	            $pt->is_reply_owner = false;
-	            $pt->is_ro_verified = false;
-	            $reply_user_data    = PT_UserData($reply->user_id);
-	            $is_liked_reply     = '';
-	            $is_disliked_reply  = '';
-	            if (IS_LOGGED == true) {
-	                $is_reply_owner = $db->where('id', $reply->id)->where('user_id', $user->id)->getValue(T_COMM_REPLIES, 'count(*)');
-	                if ($is_reply_owner || $pt->video_owner) {
-	                    $pt->is_reply_owner = true;
-	                }
-
-	                //Check is this reply  voted by logged-in user
-	                $db->where('reply_id', $reply->id);
-	                $db->where('user_id', $user->id);
-	                $db->where('type', 1);
-	                $is_liked_reply    = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-
-	                $db->where('reply_id', $reply->id);
-	                $db->where('user_id', $user->id);
-	                $db->where('type', 2);
-	                $is_disliked_reply = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-	            }
-
-	            if ($reply_user_data->verified == 1) {
-	            	$pt->is_ro_verified = true;
-	            }
-
-	            //Get related to this reply likes
-	            $db->where('reply_id', $reply->id);
-	            $db->where('type', 1);
-	            $reply_likes    = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-
-	            $db->where('reply_id', $reply->id);
-	            $db->where('type', 2);
-	            $reply_dislikes = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-   
-	            $replies    .= PT_LoadPage('watch/replies', array(
-	                'ID' => $reply->id,
-	                'TEXT' => PT_Markup($reply->text),
-	                'TIME' => PT_Time_Elapsed_String($reply->time),
-	                'USER_DATA' => $reply_user_data,
-	                'COMM_ID' => $comment->id,
-	                'LIKES' => $reply_likes,
-	                'DIS_LIKES' => $reply_dislikes,
-	                'LIKED' => $is_liked_reply,
-	                'DIS_LIKED' => $is_disliked_reply
- 	            ));
-	        }
+	        $replies = PT_RenderWatchReplies($comment);
 
 	        if (IS_LOGGED == true) {
 

@@ -16,6 +16,9 @@ error_reporting(0);
 @ini_set('max_execution_time', 0);
 @ini_set("memory_limit", "-1");
 @set_time_limit(0);
+require_once __DIR__ . '/traffic_budgets.php';
+$traffic_budget = PT_TrafficBudget($_SERVER, $_GET);
+PT_ApplyTrafficBudget($traffic_budget);
 
 require 'config.php';
 require 'phpMailer_config.php';
@@ -58,6 +61,7 @@ $query = $mysqli->query("SET NAMES utf8mb4");
 $db = new MysqliDb($mysqli);
 require_once __DIR__ . '/traffic_metrics.php';
 PT_TrafficBeginRequest($db);
+PT_ApplyTrafficDatabaseBudget($db, $mysqli->server_info, $traffic_budget);
 
 
 $http_header = 'http://';

@@ -150,15 +150,15 @@ else{
 	$week_end = strtotime('next Friday, 11:59pm', $time);
 }
 
-if (empty($pt->user->active_expire) || $pt->user->active_expire <= time()) {
-	$db->where('id', $pt->user->id)->update(T_USERS,array('active_expire' => $week_end,
-														  'active_time' => 6));
-	$_SESSION['active_time'] = time()+6;
+$activity_now = time();
+$activity_last = (int) ($_SESSION['traffic_activity_at'] ?? 0);
+// Credit elapsed visible polling time, bounded so returning from a hidden tab
+// cannot add the whole offline interval. Dropdown refreshes do not add six seconds.
+$activity_seconds = $activity_last > 0 ? min(30, max(0, $activity_now - $activity_last)) : 6;
+if (empty($pt->user->active_expire) || $pt->user->active_expire <= $activity_now) {
+    $db->where('id', $pt->user->id)->update(T_USERS, array('active_expire' => $week_end, 'active_time' => $activity_seconds));
+} elseif ($activity_seconds > 0) {
+    $db->where('id', $pt->user->id)->update(T_USERS, array('active_time' => $db->inc($activity_seconds)));
 }
-else{
-	if (empty($_SESSION['active_time']) || (!empty($_SESSION['active_time']) && $_SESSION['active_time'] <= time())) {
-		$db->where('id', $pt->user->id)->update(T_USERS,array('active_time' => $db->inc(6)));
-		$_SESSION['active_time'] = time()+6;
-	}
-}
+$_SESSION['traffic_activity_at'] = $activity_now;
 // user active

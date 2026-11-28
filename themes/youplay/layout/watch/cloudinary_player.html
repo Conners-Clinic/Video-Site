@@ -28,7 +28,7 @@
            }
         }
         else if ($('[data-litsitem-id]').length > 0){
-          var url = $('#next-video').find('[data-litsitem-id="{{KEY}}"]').next().find('a').attr('href');
+          var url = PT_NextWatchUrl();
           if (url) {
             window.location.href = url;
           }

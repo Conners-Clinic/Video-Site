@@ -11,6 +11,8 @@
 require_once __DIR__ . '/traffic_reads.php';
 require_once __DIR__ . '/traffic_search.php';
 require_once __DIR__ . '/traffic_cards.php';
+require_once __DIR__ . '/traffic_comments.php';
+require_once __DIR__ . '/traffic_lists.php';
 require_once __DIR__ . '/traffic_publication.php';
 require_once('app_start.php');
 use Aws\S3\S3Client;
@@ -1728,67 +1730,16 @@ function pt_comm_object_data($comment = null,$pinned = null){
     $replies              = '';
     $pt->pin              = false;
     $html                 = '';
-    $comment_replies      = $db->where('comment_id', $comment->id)->get(T_COMM_REPLIES);
     $is_liked_comment     = '';
     $is_comment_disliked  = '';
     $comment_user_data    = PT_UserData($comment->user_id);
     $pt->is_verified      = ($comment_user_data->verified == 1) ? true : false;
     $pt->video_owner      = false;
 
-    $db->where('id',$comment->video_id);
-    $db->where('user_id',$user->id);
-    $pt->video_owner = ($db->getValue(T_VIDEOS,'count(*)') > 0);
-    foreach ($comment_replies as $reply) {
-        $pt->is_reply_owner = false;
-        $pt->is_ro_verified = false;
-        $reply_user_data    = PT_UserData($reply->user_id);
-        $is_liked_reply     = '';
-        $is_disliked_reply  = '';
-        if (IS_LOGGED == true) {
-            $is_reply_owner = $db->where('id', $reply->id)->where('user_id', $user->id)->getValue(T_COMM_REPLIES, 'count(*)');
-            if ($is_reply_owner || $pt->video_owner) {
-                $pt->is_reply_owner = true;
-            }
-
-            //Check is this reply  voted by logged-in user
-            $db->where('reply_id', $reply->id);
-            $db->where('user_id', $user->id);
-            $db->where('type', 1);
-            $is_liked_reply    = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-
-            $db->where('reply_id', $reply->id);
-            $db->where('user_id', $user->id);
-            $db->where('type', 2);
-            $is_disliked_reply = ($db->getValue(T_COMMENTS_LIKES, 'count(*)') > 0) ? 'active' : '';
-        }
-
-        if ($reply_user_data->verified == 1) {
-            $pt->is_ro_verified = true;
-        }
-
-        //Get related to reply likes
-        $db->where('reply_id', $reply->id);
-        $db->where('type', 1);
-        $reply_likes    = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-
-        $db->where('reply_id', $reply->id);
-        $db->where('type', 2);
-        $reply_dislikes = $db->getValue(T_COMMENTS_LIKES, 'count(*)');
-
-
-
-        $replies    .= PT_LoadPage('watch/replies', array(
-            'ID' => $reply->id,
-            'TEXT' => PT_Markup(PT_Duration($reply->text)),
-            'TIME' => PT_Time_Elapsed_String($reply->time),
-            'USER_DATA' => $reply_user_data,
-            'COMM_ID' => $comment->id,
-            'LIKES'  => $reply_likes,
-            'DIS_LIKES' => $reply_dislikes,
-            'LIKED' => $is_liked_reply,
-            'DIS_LIKED' => $is_disliked_reply,
-        ));
+    if (IS_LOGGED) {
+        $pt->video_owner = $db->where('id', $comment->video_id)->where('user_id', $user->id)->getValue(T_VIDEOS, 'count(*)') > 0;
     }
+    $replies = PT_RenderWatchReplies($comment);
 
     if (IS_LOGGED == true) {
         $db->where('comment_id', $comment->id);
