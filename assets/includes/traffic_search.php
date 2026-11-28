@@ -16,12 +16,23 @@ function PT_SearchLike($term) {
     return '%' . strtr($term, array('!' => '!!', '%' => '!%', '_' => '!_')) . '%';
 }
 
+function PT_SearchColumnMatch($column, $term) {
+    // Legacy imports can store entities while newer rows contain ordinary text.
+    $terms = array_values(array_unique(array($term, htmlspecialchars($term, ENT_QUOTES, 'UTF-8'))));
+    $matches = array(); $params = array();
+    foreach ($terms as $value) { $matches[] = $column . " LIKE ? ESCAPE '!'"; $params[] = PT_SearchLike($value); }
+    return array('(' . implode(' OR ', $matches) . ')', $params);
+}
+
 function PT_SearchWhere($term, $options = array()) {
     if (PT_SearchTerm($term) === null) { return array('1 = 0', array()); }
-    $pattern = PT_SearchLike($term);
-    $where = "(title LIKE ? ESCAPE '!' OR tags LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!') AND approved = 1";
+    $matches = array(); $params = array();
+    foreach (array('title', 'tags', 'description') as $column) {
+        list($match, $values) = PT_SearchColumnMatch($column, $term);
+        $matches[] = $match; array_push($params, ...$values);
+    }
+    $where = '(' . implode(' OR ', $matches) . ') AND approved = 1';
     $where .= !empty($options['admin']) ? ' AND privacy IN (0, 2)' : ' AND privacy = 0';
-    $params = array($pattern, $pattern, $pattern);
     foreach (array('categories' => array('category_id', 'IN'), 'blocked' => array('user_id', 'NOT IN')) as $key => $rule) {
         $values = array_values(array_unique(array_map('strval', (array) ($options[$key] ?? array()))));
         if ($values) {
@@ -45,8 +56,13 @@ function PT_SearchVideoRows($database, $term, $options = array()) {
     $columns = !empty($options['suggestions']) ? 'id, video_id, title, is_short, privacy' : implode(', ', PT_VideoCardColumns());
     $order = 'id ASC';
     if (!isset($options['after_id'])) {
-        $order = "CASE WHEN title LIKE ? ESCAPE '!' THEN 1 WHEN description LIKE ? ESCAPE '!' THEN 2 WHEN tags LIKE ? ESCAPE '!' THEN 3 ELSE 4 END, id ASC";
-        $pattern = PT_SearchLike($term); array_push($params, $pattern, $pattern, $pattern);
+        $order = 'CASE';
+        foreach (array('title' => 1, 'description' => 2, 'tags' => 3) as $column => $rank) {
+            list($match, $values) = PT_SearchColumnMatch($column, $term);
+            $order .= ' WHEN ' . $match . ' THEN ' . $rank;
+            array_push($params, ...$values);
+        }
+        $order .= ' ELSE 4 END, id ASC';
     }
     return $database->objectBuilder()->rawQuery('SELECT ' . $columns . ' FROM ' . T_VIDEOS . ' WHERE ' . $where . ' ORDER BY ' . $order . ' LIMIT ' . $limit . ' OFFSET ' . (($page - 1) * $limit), $params) ?: array();
 }

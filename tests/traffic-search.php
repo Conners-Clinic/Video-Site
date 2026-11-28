@@ -25,6 +25,7 @@ searchCheck(count($db->calls) === 0, 'Invalid input causes no search database re
 PT_SearchVideoRows($db, "O'Brien", array('suggestions' => true, 'limit' => 10));
 list($sql, $params) = $db->calls[0];
 searchCheck(strpos($sql, "O'Brien") === false && in_array("%O'Brien%", $params, true), 'Input bound separately from SQL');
+searchCheck(in_array('%O&#039;Brien%', $params, true), 'Legacy entity-encoded names remain searchable');
 searchCheck(strpos($sql, 'SELECT *') === false && strpos($sql, 'LIMIT 10') !== false, 'Suggestion projection and cap');
 searchCheck(strpos($sql, 'approved = 1') !== false && strpos($sql, 'privacy = 0') !== false, 'Guest approval/privacy rule');
 list($where, $params) = PT_SearchWhere('IV', array('admin' => true, 'blocked' => array(2), 'categories' => array('category_1')));

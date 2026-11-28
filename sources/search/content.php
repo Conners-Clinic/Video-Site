@@ -66,8 +66,9 @@ if (empty($final)) {
 	$final = $list;
 }
 
-$channel_pattern = PT_SearchLike($term);
-$get_users = $db->objectBuilder()->rawQuery("SELECT id, username, first_name, last_name, avatar, verified FROM " . T_USERS . " WHERE (username LIKE ? ESCAPE '!' OR CONCAT(first_name, ' ', last_name) LIKE ? ESCAPE '!') ORDER BY id ASC LIMIT 50", array($channel_pattern, $channel_pattern));
+list($username_match, $username_params) = PT_SearchColumnMatch('username', $term);
+list($name_match, $name_params) = PT_SearchColumnMatch("CONCAT(first_name, ' ', last_name)", $term);
+$get_users = $db->objectBuilder()->rawQuery("SELECT id, username, first_name, last_name, avatar, verified FROM " . T_USERS . " WHERE (" . $username_match . ' OR ' . $name_match . ') ORDER BY id ASC LIMIT 50', array_merge($username_params, $name_params));
 if (!empty($get_users)) {
     $len = count($get_users);
     foreach ($get_users as $key => $user) {
