@@ -10,6 +10,7 @@ function checkoutGit($root, $args) {
     return implode("\n", $lines);
 }
 function checkoutFunctions($source) {
+    $source = rtrim(str_replace("\r\n", "\n", $source));
     $tokens = token_get_all($source); $functions = array(); $outside = '';
     for ($i = 0; $i < count($tokens); $i++) {
         $token = $tokens[$i];
@@ -72,6 +73,10 @@ try {
         $result['additional_function_count'] = count(array_diff_key($working['functions'], $base['functions']));
         $result['top_level_tokens_match_head'] = $working['outside'] === $base['outside'];
         $result['changed_functions_already_in_candidate'] = $represented;
+        $headWithoutSuffix = checkoutFunctions(str_replace(' . "?a"', '', checkoutGit($root, 'show HEAD:' . $path)));
+        $candidateWithoutSuffix = checkoutFunctions(str_replace(' . "?a"', '', file_get_contents(dirname(__DIR__) . '/' . $path)));
+        $result['media_matches_head_without_cache_suffix'] = $working['functions']['PT_GetMedia'] === $headWithoutSuffix['functions']['PT_GetMedia'];
+        $result['media_matches_candidate_without_cache_suffix'] = $working['functions']['PT_GetMedia'] === $candidateWithoutSuffix['functions']['PT_GetMedia'];
         $result['unstaged_change_count'] = count(array_filter(explode("\n", checkoutGit($root, 'diff --name-only'))));
         $phase = $label . '_runtime_probe';
         $result['fpm_before_application_bootstrap'] = checkoutProbe($root, $host);

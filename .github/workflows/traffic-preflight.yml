@@ -211,7 +211,7 @@ jobs:
                         $settings = $db->query("SELECT name, value FROM config WHERE name IN ('theme', 'server', 'coinpayments', 'transcript_system')");
                         $result['config_table_readable'] = true;
                         while ($setting = $settings->fetch_assoc()) {
-                            $allowed = $setting['name'] === 'theme' ? array('youplay', 'default') : ($setting['name'] === 'server' ? array('php', 'nodejs') : array('on', 'off', '0', '1'));
+                            $allowed = $setting['name'] === 'theme' ? array('youplay', 'default') : ($setting['name'] === 'server' ? array('php', 'nodejs', 'PHP', 'Nodejs', '0', '1') : array('on', 'off', '0', '1'));
                             $result[$setting['name']] = in_array($setting['value'], $allowed, true) ? $setting['value'] : 'other';
                         }
                     } catch (Throwable $ignored) { /* Report only readability, never SQL or exception details. */ }
